@@ -46,6 +46,7 @@ object FillerWordAnalyzer {
         val totalWordCount: Int,
         val fillerPercentage: Float,
         val status: String, // "Baik" or "Berlebihan"
+        val fillerScore: Int, // 15 to 100
         val fillerStats: List<FillerStat>,
         val fillerDetailsJson: String,
         val matches: List<FillerWordMatch>
@@ -58,6 +59,7 @@ object FillerWordAnalyzer {
                 totalWordCount = 0,
                 fillerPercentage = 0f,
                 status = "Baik",
+                fillerScore = 100,
                 fillerStats = emptyList(),
                 fillerDetailsJson = "[]",
                 matches = emptyList()
@@ -106,6 +108,16 @@ object FillerWordAnalyzer {
             "Berlebihan"
         }
 
+        // Rigorous Public Speaking Fluency Score
+        val fillerScore = when {
+            fillerCount == 0 -> 100
+            roundedPercent <= 2.0f -> (100 - (roundedPercent * 3.5f)).toInt().coerceIn(92, 100)
+            roundedPercent <= 5.0f -> (92 - ((roundedPercent - 2.0f) * 4.0f)).toInt().coerceIn(80, 92)
+            roundedPercent <= 10.0f -> (80 - ((roundedPercent - 5.0f) * 3.5f)).toInt().coerceIn(60, 80)
+            roundedPercent <= 20.0f -> (60 - ((roundedPercent - 10.0f) * 2.5f)).toInt().coerceIn(35, 60)
+            else -> (35 - ((roundedPercent - 20.0f) * 0.8f)).toInt().coerceIn(15, 35)
+        }
+
         val stats = statMap.map { FillerStat(it.key, it.value) }.sortedByDescending { it.count }
         val json = Gson().toJson(stats)
 
@@ -114,6 +126,7 @@ object FillerWordAnalyzer {
             totalWordCount = totalWords,
             fillerPercentage = roundedPercent,
             status = status,
+            fillerScore = fillerScore,
             fillerStats = stats,
             fillerDetailsJson = json,
             matches = matches

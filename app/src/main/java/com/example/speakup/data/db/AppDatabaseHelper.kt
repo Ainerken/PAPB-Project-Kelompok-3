@@ -13,10 +13,12 @@ class AppDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
 
     companion object {
         private const val DATABASE_NAME = "speakup_db.db"
-        private const val DATABASE_VERSION = 1
+        private const val DATABASE_VERSION = 3
 
         const val TABLE_SESSIONS = "practice_sessions"
         const val COL_ID = "id"
+        const val COL_SESSION_USER_ID = "user_id"
+        const val COL_SESSION_USER_EMAIL = "user_email"
         const val COL_TITLE = "title"
         const val COL_TIMESTAMP = "timestamp"
         const val COL_FORMATTED_DATE = "formatted_date"
@@ -52,12 +54,15 @@ class AppDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
         const val COL_USER_SCENARIO = "target_scenario"
         const val COL_USER_FREQUENCY = "frequency"
         const val COL_USER_TONE = "feedback_tone"
+        const val COL_USER_PHOTO_URI = "photo_uri"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
         val createSessionsTable = """
             CREATE TABLE $TABLE_SESSIONS (
                 $COL_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COL_SESSION_USER_ID TEXT,
+                $COL_SESSION_USER_EMAIL TEXT,
                 $COL_TITLE TEXT NOT NULL,
                 $COL_TIMESTAMP INTEGER NOT NULL,
                 $COL_FORMATTED_DATE TEXT NOT NULL,
@@ -96,7 +101,8 @@ class AppDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
                 $COL_USER_LANGUAGE TEXT NOT NULL,
                 $COL_USER_SCENARIO TEXT NOT NULL,
                 $COL_USER_FREQUENCY TEXT NOT NULL,
-                $COL_USER_TONE TEXT NOT NULL
+                $COL_USER_TONE TEXT NOT NULL,
+                $COL_USER_PHOTO_URI TEXT
             )
         """.trimIndent()
 
@@ -123,13 +129,40 @@ class AppDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_SESSIONS")
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_USER")
-        onCreate(db)
+        try {
+            db.execSQL("ALTER TABLE $TABLE_USER ADD COLUMN $COL_USER_PHOTO_URI TEXT")
+        } catch (e: Exception) {}
+        try {
+            db.execSQL("ALTER TABLE $TABLE_SESSIONS ADD COLUMN $COL_SESSION_USER_ID TEXT")
+        } catch (e: Exception) {}
+        try {
+            db.execSQL("ALTER TABLE $TABLE_SESSIONS ADD COLUMN $COL_SESSION_USER_EMAIL TEXT")
+        } catch (e: Exception) {}
+        try {
+            db.execSQL("UPDATE $TABLE_SESSIONS SET $COL_SESSION_USER_ID = 'demo_user', $COL_SESSION_USER_EMAIL = 'imran@student.ub.ac.id' WHERE $COL_SESSION_USER_EMAIL IS NULL OR $COL_SESSION_USER_EMAIL = ''")
+        } catch (e: Exception) {}
+    }
+
+    override fun onOpen(db: SQLiteDatabase) {
+        super.onOpen(db)
+        try {
+            db.execSQL("ALTER TABLE $TABLE_USER ADD COLUMN $COL_USER_PHOTO_URI TEXT")
+        } catch (e: Exception) {}
+        try {
+            db.execSQL("ALTER TABLE $TABLE_SESSIONS ADD COLUMN $COL_SESSION_USER_ID TEXT")
+        } catch (e: Exception) {}
+        try {
+            db.execSQL("ALTER TABLE $TABLE_SESSIONS ADD COLUMN $COL_SESSION_USER_EMAIL TEXT")
+        } catch (e: Exception) {}
+        try {
+            db.execSQL("UPDATE $TABLE_SESSIONS SET $COL_SESSION_USER_ID = 'demo_user', $COL_SESSION_USER_EMAIL = 'imran@student.ub.ac.id' WHERE $COL_SESSION_USER_EMAIL IS NULL OR $COL_SESSION_USER_EMAIL = ''")
+        } catch (e: Exception) {}
     }
 
     private fun seedInitialSessions(db: SQLiteDatabase) {
         val s1 = ContentValues().apply {
+            put(COL_SESSION_USER_ID, "demo_user")
+            put(COL_SESSION_USER_EMAIL, "imran@student.ub.ac.id")
             put(COL_TITLE, "Brief Interview Introduction")
             put(COL_TIMESTAMP, System.currentTimeMillis() - 86400000L * 2)
             put(COL_FORMATTED_DATE, "Oct 13")
@@ -157,6 +190,8 @@ class AppDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
         }
 
         val s2 = ContentValues().apply {
+            put(COL_SESSION_USER_ID, "demo_user")
+            put(COL_SESSION_USER_EMAIL, "imran@student.ub.ac.id")
             put(COL_TITLE, "UI/UX Presentation")
             put(COL_TIMESTAMP, System.currentTimeMillis() - 86400000L * 3)
             put(COL_FORMATTED_DATE, "Oct 12")
@@ -184,6 +219,8 @@ class AppDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
         }
 
         val s3 = ContentValues().apply {
+            put(COL_SESSION_USER_ID, "demo_user")
+            put(COL_SESSION_USER_EMAIL, "imran@student.ub.ac.id")
             put(COL_TITLE, "Project Presentation")
             put(COL_TIMESTAMP, System.currentTimeMillis() - 86400000L * 4)
             put(COL_FORMATTED_DATE, "Oct 11")

@@ -2,18 +2,29 @@ package com.example.speakup.data.repository
 
 import android.content.ContentValues
 import android.content.Context
+import android.util.Log
 import com.example.speakup.data.db.AppDatabaseHelper
 import com.example.speakup.data.model.PracticeSession
 import com.example.speakup.data.model.WeeklyStats
+import com.example.speakup.data.remote.SupabaseService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class SessionRepository(context: Context) {
     private val dbHelper = AppDatabaseHelper(context.applicationContext)
+    private val supabaseService = SupabaseService()
+    private val userRepo = UserRepository(context.applicationContext)
+    private val tag = "SessionRepository"
 
     suspend fun insertSession(session: PracticeSession): Long = withContext(Dispatchers.IO) {
         val db = dbHelper.writableDatabase
+        val userId = userRepo.getUserId()
+        val userEmail = userRepo.getUserEmail() ?: "imran@student.ub.ac.id"
+
         val values = ContentValues().apply {
+            put(AppDatabaseHelper.COL_SESSION_USER_ID, userId ?: "demo_user")
+            put(AppDatabaseHelper.COL_SESSION_USER_EMAIL, userEmail)
             put(AppDatabaseHelper.COL_TITLE, session.title)
             put(AppDatabaseHelper.COL_TIMESTAMP, session.timestamp)
             put(AppDatabaseHelper.COL_FORMATTED_DATE, session.formattedDate)
@@ -39,47 +50,97 @@ class SessionRepository(context: Context) {
             put(AppDatabaseHelper.COL_FEEDBACK_REASON, session.feedbackReason)
             put(AppDatabaseHelper.COL_FEEDBACK_SUMMARY, session.feedbackSummary)
         }
-        db.insert(AppDatabaseHelper.TABLE_SESSIONS, null, values)
+        val localId = db.insert(AppDatabaseHelper.TABLE_SESSIONS, null, values)
+
+        // Sync to Supabase Cloud Database & Storage
+        try {
+            val token = userRepo.getAuthToken()
+
+            if (!userId.isNullOrBlank()) {
+                var cloudAudioUrl: String? = null
+                if (!session.audioPath.isNullOrBlank()) {
+                    val localAudioFile = File(session.audioPath)
+                    if (localAudioFile.exists()) {
+                        cloudAudioUrl = supabaseService.uploadAudio(userId, localAudioFile, token)
+                    }
+                }
+                val inserted = supabaseService.insertPracticeSession(userId, session, cloudAudioUrl, token)
+                Log.d(tag, "Session synced to Supabase: $inserted, Audio Cloud: $cloudAudioUrl")
+            }
+        } catch (e: Exception) {
+            Log.w(tag, "Failed to sync session to Supabase in background", e)
+        }
+
+        localId
     }
 
     suspend fun getAllSessions(): List<PracticeSession> = withContext(Dispatchers.IO) {
+        val userId = userRepo.getUserId()
+        val userEmail = userRepo.getUserEmail()
+        val token = userRepo.getAuthToken()
+
         val list = mutableListOf<PracticeSession>()
+
+        // 1. Fetch remote sessions from Supabase for this user (if logged in to Supabase)
+        if (!userId.isNullOrBlank()) {
+            try {
+                val cloudSessions = supabaseService.getPracticeSessions(userId, token)
+                if (cloudSessions.isNotEmpty()) {
+                    list.addAll(cloudSessions)
+                }
+            } catch (e: Exception) {
+                Log.w(tag, "Failed to fetch cloud sessions", e)
+            }
+        }
+
+        // 2. Query local SQLite sessions strictly scoped to current user
         val db = dbHelper.readableDatabase
+        val selection: String
+        val selectionArgs: Array<String>?
+
+        if (!userId.isNullOrBlank() && !userEmail.isNullOrBlank()) {
+            selection = "${AppDatabaseHelper.COL_SESSION_USER_ID} = ? OR ${AppDatabaseHelper.COL_SESSION_USER_EMAIL} = ?"
+            selectionArgs = arrayOf(userId, userEmail)
+        } else if (!userId.isNullOrBlank()) {
+            selection = "${AppDatabaseHelper.COL_SESSION_USER_ID} = ?"
+            selectionArgs = arrayOf(userId)
+        } else if (!userEmail.isNullOrBlank()) {
+            selection = "${AppDatabaseHelper.COL_SESSION_USER_EMAIL} = ?"
+            selectionArgs = arrayOf(userEmail)
+        } else {
+            // Demo mode / default unauthenticated user
+            selection = "${AppDatabaseHelper.COL_SESSION_USER_ID} = 'demo_user' OR ${AppDatabaseHelper.COL_SESSION_USER_EMAIL} = 'imran@student.ub.ac.id'"
+            selectionArgs = null
+        }
+
         val cursor = db.query(
             AppDatabaseHelper.TABLE_SESSIONS,
             null,
-            null,
-            null,
+            selection,
+            selectionArgs,
             null,
             null,
             "${AppDatabaseHelper.COL_TIMESTAMP} DESC"
         )
         cursor.use {
             while (it.moveToNext()) {
-                list.add(dbHelper.mapCursorToSession(it))
+                val localSession = dbHelper.mapCursorToSession(it)
+                val duplicate = list.any { s ->
+                    s.title.equals(localSession.title, ignoreCase = true) &&
+                    s.formattedDate == localSession.formattedDate &&
+                    s.formattedTime == localSession.formattedTime
+                }
+                if (!duplicate) {
+                    list.add(localSession)
+                }
             }
         }
-        list
+        list.sortedByDescending { it.timestamp }
     }
 
     suspend fun getSessionsByLanguage(language: String): List<PracticeSession> = withContext(Dispatchers.IO) {
-        val list = mutableListOf<PracticeSession>()
-        val db = dbHelper.readableDatabase
-        val cursor = db.query(
-            AppDatabaseHelper.TABLE_SESSIONS,
-            null,
-            "${AppDatabaseHelper.COL_LANGUAGE} = ?",
-            arrayOf(language),
-            null,
-            null,
-            "${AppDatabaseHelper.COL_TIMESTAMP} DESC"
-        )
-        cursor.use {
-            while (it.moveToNext()) {
-                list.add(dbHelper.mapCursorToSession(it))
-            }
-        }
-        list
+        val all = getAllSessions()
+        all.filter { it.language.equals(language, ignoreCase = true) || it.language.startsWith(language.take(4), ignoreCase = true) }
     }
 
     suspend fun getSessionById(id: Long): PracticeSession? = withContext(Dispatchers.IO) {
@@ -99,6 +160,10 @@ class SessionRepository(context: Context) {
             }
         }
         null
+    }
+
+    suspend fun getLatestSession(): PracticeSession? = withContext(Dispatchers.IO) {
+        getAllSessions().firstOrNull()
     }
 
     suspend fun updateSessionTitle(id: Long, newTitle: String): Boolean = withContext(Dispatchers.IO) {
@@ -134,32 +199,27 @@ class SessionRepository(context: Context) {
                 fluidityPercent = 0,
                 averagePaceWpm = 0,
                 highestScore = 0,
-                personalBestSessionName = "-",
+                personalBestSessionName = "Belum Ada Sesi",
                 averageScore = 0
             )
         }
 
         val total = sessions.size
         val avgScore = sessions.map { it.overallScore }.average().toInt()
-        val avgPace = sessions.map { it.wpm }.average().toInt()
-        val bestSession = sessions.maxByOrNull { it.overallScore } ?: sessions[0]
-
-        // Fluidity is related to low fillers and optimal WPM
-        val fluidity = ((100 - (sessions.map { it.fillerPercentage }.average() * 3).coerceIn(0.0, 30.0))).toInt()
+        val highest = sessions.maxOf { it.overallScore }
+        val bestSession = sessions.maxByOrNull { it.overallScore }
+        val avgWpm = sessions.map { it.wpm }.average().toInt()
+        val idealCount = sessions.count { it.wpmCategory == "Ideal" }
+        val fluidity = if (total > 0) ((idealCount.toFloat() / total) * 100).toInt() else 85
 
         WeeklyStats(
-            trainingTotals = total.coerceAtLeast(10), // Matching Figma mockup 10
-            improvementPercent = 54, // Matching Figma mockup +54%
-            fluidityPercent = fluidity.coerceIn(85, 96), // e.g. 92%
-            averagePaceWpm = avgPace.coerceAtLeast(126), // e.g. 126 WPM
-            highestScore = bestSession.overallScore.coerceAtLeast(95),
-            personalBestSessionName = "Thursday session",
-            averageScore = avgScore.coerceAtLeast(88) // 88/100
+            trainingTotals = total,
+            improvementPercent = (avgScore - 50).coerceIn(10, 95),
+            fluidityPercent = fluidity.coerceIn(40, 98),
+            averagePaceWpm = avgWpm,
+            highestScore = highest,
+            personalBestSessionName = bestSession?.title ?: "Recent Practice",
+            averageScore = avgScore
         )
-    }
-
-    suspend fun getLatestSession(): PracticeSession? = withContext(Dispatchers.IO) {
-        val sessions = getAllSessions()
-        sessions.firstOrNull()
     }
 }

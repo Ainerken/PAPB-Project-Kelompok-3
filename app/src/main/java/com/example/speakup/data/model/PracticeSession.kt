@@ -66,5 +66,6 @@ data class UserProfile(
     val mainLanguage: String = "English",
     val targetScenario: String = "Presentation",
     val frequency: String = "Daily",
-    val feedbackTone: String = "Strict"
+    val feedbackTone: String = "Strict",
+    val photoUri: String? = null
 )

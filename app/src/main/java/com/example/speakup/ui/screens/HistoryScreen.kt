@@ -235,14 +235,18 @@ fun HistoryScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.weight(1f)
                                 ) {
+                                    val badgeBgColor = when {
+                                        s.overallScore >= 80 -> PrimaryBlue
+                                        s.overallScore >= 60 -> Color(0xFFD97706)
+                                        else -> Color(0xFFDC2626)
+                                    }
+
                                     // Score Badge
                                     Box(
                                         modifier = Modifier
                                             .size(54.dp)
                                             .clip(RoundedCornerShape(16.dp))
-                                            .background(
-                                                if (s.overallScore >= 90) PrimaryBlue else PrimaryDarkNavy
-                                            ),
+                                            .background(badgeBgColor),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(

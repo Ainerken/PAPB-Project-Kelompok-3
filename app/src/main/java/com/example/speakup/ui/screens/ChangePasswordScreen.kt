@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.speakup.data.repository.UserRepository
 import com.example.speakup.ui.theme.*
+import kotlinx.coroutines.launch
 
 @Composable
 fun ChangePasswordScreen(
@@ -35,10 +36,12 @@ fun ChangePasswordScreen(
     val context = LocalContext.current
     val strings = LocalAppStrings.current
     val userRepo = remember { UserRepository(context) }
+    val coroutineScope = rememberCoroutineScope()
 
-    var oldPassword by remember { mutableStateOf("password123") }
-    var newPassword by remember { mutableStateOf("password999") }
-    var confirmNewPassword by remember { mutableStateOf("password999") }
+    var oldPassword by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmNewPassword by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = BackgroundLight
@@ -195,14 +198,34 @@ fun ChangePasswordScreen(
 
                         Button(
                             onClick = {
-                                if (newPassword != confirmNewPassword) {
-                                    Toast.makeText(context, strings.passwordsDoNotMatch, Toast.LENGTH_SHORT).show()
-                                } else {
-                                    userRepo.setPassword(newPassword)
-                                    Toast.makeText(context, strings.passwordChangedSuccess, Toast.LENGTH_SHORT).show()
-                                    onBack()
+                                when {
+                                    oldPassword.isBlank() || newPassword.isBlank() -> {
+                                        Toast.makeText(context, strings.emailPasswordRequired, Toast.LENGTH_SHORT).show()
+                                    }
+                                    newPassword.length < 6 -> {
+                                        val msg = if (strings.isIndonesian) "Kata sandi minimal 6 karakter" else "Password must be at least 6 characters"
+                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    }
+                                    newPassword != confirmNewPassword -> {
+                                        Toast.makeText(context, strings.passwordsDoNotMatch, Toast.LENGTH_SHORT).show()
+                                    }
+                                    else -> {
+                                        isLoading = true
+                                        coroutineScope.launch {
+                                            val (ok, err) = userRepo.changePassword(oldPassword, newPassword)
+                                            isLoading = false
+                                            if (ok) {
+                                                Toast.makeText(context, strings.passwordChangedSuccess, Toast.LENGTH_SHORT).show()
+                                                onBack()
+                                            } else {
+                                                val msg = if (err == "WRONG_CURRENT_PASSWORD") strings.wrongCurrentPassword else (err ?: strings.wrongCurrentPassword)
+                                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
                                 }
                             },
+                            enabled = !isLoading,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(52.dp)
@@ -210,12 +233,20 @@ fun ChangePasswordScreen(
                             shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                         ) {
-                            Text(
-                                text = strings.changePassword,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    modifier = Modifier.size(22.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    text = strings.changePassword,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
                         }
                     }
                 }

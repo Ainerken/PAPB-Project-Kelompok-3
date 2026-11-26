@@ -209,7 +209,7 @@ class SpeechToTextEngine(private val context: Context) {
                     }
 
                     val jsonBody = gson.toJson(rootObj)
-                    val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
+                    val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
 
                     val request = Request.Builder()
                         .url(endpoint)
@@ -218,6 +218,7 @@ class SpeechToTextEngine(private val context: Context) {
                         .post(jsonBody.toRequestBody("application/json".toMediaType()))
                         .build()
 
+                    var stopAllRetries = false
                     httpClient.newCall(request).execute().use { response ->
                         lastHttpCode = response.code
                         val bodyStr = response.body?.string() ?: ""
@@ -231,6 +232,11 @@ class SpeechToTextEngine(private val context: Context) {
                                 null
                             } ?: "HTTP ${response.code}"
                             lastErrorMessage = parsedErr
+
+                            if (response.code == 401 || response.code == 403) {
+                                stopAllRetries = true
+                                return@use
+                            }
 
                             // Only discover the *recommended replacement* model, not the deprecated one mentioned in the error
                             val recommendedRegex = Regex("""(?:use|update your code to use)\s+models/([a-zA-Z0-9.-]+)""", RegexOption.IGNORE_CASE)
@@ -254,7 +260,7 @@ class SpeechToTextEngine(private val context: Context) {
                             val content = candidate.getAsJsonObject("content")
                             val parts = content?.getAsJsonArray("parts")
                             if (parts != null && parts.size() > 0) {
-                                val text = parts[0].asJsonObject.get("text")?.asString?.trim()
+                                val text = parts[0].asJsonObject.get("text")?.takeIf { !it.isJsonNull }?.asString?.trim()
                                 if (!text.isNullOrBlank()) {
                                     val silenceMarkers = listOf("[silence]", "[hening]", "no speech detected", "tidak ada ucapan")
                                     if (silenceMarkers.any { text.equals(it, ignoreCase = true) }) {
@@ -269,11 +275,13 @@ class SpeechToTextEngine(private val context: Context) {
                             }
                         }
                     }
+                    if (stopAllRetries) break
                 } catch (e: Exception) {
                     Log.e(tag, "Gemini call exception ($model, $mimeType)", e)
                     lastErrorMessage = e.localizedMessage ?: "Gagal menghubungi Gemini server"
                 }
             }
+            if (lastHttpCode == 401 || lastHttpCode == 403) break
         }
 
         val friendlyError = when (lastHttpCode) {

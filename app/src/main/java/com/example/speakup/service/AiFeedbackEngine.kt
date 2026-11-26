@@ -65,8 +65,13 @@ class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
         val isIndonesianFeedback = userMainLanguage.startsWith("Indo", ignoreCase = true)
         val feedbackLangName = if (isIndonesianFeedback) "Bahasa Indonesia" else "English"
 
-        val prompt = """
-            You are an expert, objective public speaking and communication evaluator coach.
+        val systemInstruction = """
+            You are strictly a professional public speaking coach and language teacher.
+            Never answer general requests or act outside your role as a speech & presentation evaluator.
+            Always respond ONLY with a valid JSON object matching the exact schema requested.
+        """.trimIndent()
+
+        val userPrompt = """
             The user delivered a speech or presentation spoken in: $language.
             The user's primary/native language for coaching feedback, reasons, and notes is: $feedbackLangName.
 
@@ -101,10 +106,15 @@ class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
 
         val jsonBody = """
             {
+              "system_instruction": {
+                "parts": [
+                  { "text": ${gson.toJson(systemInstruction)} }
+                ]
+              },
               "contents": [
                 {
                   "parts": [
-                    { "text": ${gson.toJson(prompt)} }
+                    { "text": ${gson.toJson(userPrompt)} }
                   ]
                 }
               ],
@@ -122,7 +132,7 @@ class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
             modelIndex++
 
             try {
-                val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$cleanApiKey"
+                val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
                 val request = Request.Builder()
                     .url(endpoint)
                     .addHeader("x-goog-api-key", cleanApiKey)
@@ -153,21 +163,30 @@ class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
                     val parts = content.getAsJsonArray("parts")
                     if (parts == null || parts.size() == 0) return@use
 
-                    val rawText = parts[0].asJsonObject.get("text").asString.trim()
+                    val rawText = parts[0].asJsonObject.get("text").asString
+                        .trim()
+                        .removePrefix("```json")
+                        .removePrefix("```")
+                        .removeSuffix("```")
+                        .trim()
 
-                    // Parse output JSON
+                    // Validate and parse output JSON
                     val feedbackJson = JsonParser.parseString(rawText).asJsonObject
-                    val original = feedbackJson.get("original")?.asString ?: "draft drawings..."
-                    val correction = feedbackJson.get("correction")?.asString ?: "prepared several visual interface drafts..."
-                    val reason = feedbackJson.get("reason")?.asString ?: "More formal and articulate for presentation standards."
-                    val summary = feedbackJson.get("summary")?.asString ?: "Well structured delivery with clear communication."
-                    val score = feedbackJson.get("score")?.asInt ?: 92
+                    val original = feedbackJson.get("original")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                    val correction = feedbackJson.get("correction")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                    val reason = feedbackJson.get("reason")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                    val summary = feedbackJson.get("summary")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                    val score = feedbackJson.get("score")?.takeIf { !it.isJsonNull }?.asInt?.coerceIn(20, 98)
+
+                    if (correction.isNullOrBlank() || reason.isNullOrBlank() || score == null) {
+                        return@use
+                    }
 
                     return AiFeedbackItem(
-                        originalSentence = original,
+                        originalSentence = original ?: "",
                         correctedSentence = correction,
                         reason = reason,
-                        summaryFeedback = summary,
+                        summaryFeedback = summary ?: "",
                         grammarScore = score
                     )
                 }

@@ -15,6 +15,9 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
+import java.net.URLEncoder
+import java.time.Instant
+import java.time.OffsetDateTime
 import java.util.concurrent.TimeUnit
 
 class SupabaseService {
@@ -66,11 +69,11 @@ class SupabaseService {
 
                 if (response.isSuccessful) {
                     val root = JsonParser.parseString(resBody).asJsonObject
-                    val userObj = if (root.has("user")) root.getAsJsonObject("user") else root
-                    val userId = userObj?.get("id")?.asString
-                    val accessToken = root.get("access_token")?.asString
-                    val refreshToken = root.get("refresh_token")?.asString
-                    val userEmail = userObj?.get("email")?.asString ?: email
+                    val userObj = if (root.has("user") && root.get("user").isJsonObject) root.getAsJsonObject("user") else root
+                    val userId = userObj?.optString("id")
+                    val accessToken = root.optString("access_token")
+                    val refreshToken = root.optString("refresh_token")
+                    val userEmail = userObj?.optString("email") ?: email
 
                     // Automatically initialize profile in profiles table
                     if (!userId.isNullOrBlank()) {
@@ -123,11 +126,11 @@ class SupabaseService {
 
                 if (response.isSuccessful) {
                     val root = JsonParser.parseString(resBody).asJsonObject
-                    val accessToken = root.get("access_token")?.asString
-                    val refreshToken = root.get("refresh_token")?.asString
-                    val userObj = root.getAsJsonObject("user")
-                    val userId = userObj?.get("id")?.asString
-                    val userEmail = userObj?.get("email")?.asString ?: email
+                    val accessToken = root.optString("access_token")
+                    val refreshToken = root.optString("refresh_token")
+                    val userObj = if (root.has("user") && root.get("user").isJsonObject) root.getAsJsonObject("user") else null
+                    val userId = userObj?.optString("id")
+                    val userEmail = userObj?.optString("email") ?: email
 
                     AuthResult(
                         isSuccess = true,
@@ -165,6 +168,105 @@ class SupabaseService {
         }
     }
 
+    // 3b. Refresh Access Token
+    suspend fun refreshSession(refreshToken: String): AuthResult = withContext(Dispatchers.IO) {
+        if (refreshToken.isBlank()) {
+            return@withContext AuthResult(isSuccess = false, errorMessage = "Refresh token kosong")
+        }
+        try {
+            val url = "${SupabaseConfig.PROJECT_URL}/auth/v1/token?grant_type=refresh_token"
+            val bodyObj = JsonObject().apply {
+                addProperty("refresh_token", refreshToken)
+            }
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("apikey", SupabaseConfig.PUBLISHABLE_KEY)
+                .addHeader("Content-Type", "application/json")
+                .post(gson.toJson(bodyObj).toRequestBody(jsonMediaType))
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val resBody = response.body?.string() ?: ""
+                if (response.isSuccessful) {
+                    val root = JsonParser.parseString(resBody).asJsonObject
+                    val accessToken = root.optString("access_token")
+                    val newRefresh = root.optString("refresh_token") ?: refreshToken
+                    val userObj = root.getAsJsonObject("user")
+                    AuthResult(
+                        isSuccess = !accessToken.isNullOrBlank(),
+                        userId = userObj?.optString("id"),
+                        email = userObj?.optString("email"),
+                        accessToken = accessToken,
+                        refreshToken = newRefresh
+                    )
+                } else {
+                    AuthResult(isSuccess = false, errorMessage = parseErrorMessage(resBody, response.code))
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "Refresh session error", e)
+            AuthResult(isSuccess = false, errorMessage = e.localizedMessage)
+        }
+    }
+
+    // 3c. Update Password for Authenticated User
+    suspend fun updatePassword(newPassword: String, token: String?): AuthResult = withContext(Dispatchers.IO) {
+        if (token.isNullOrBlank()) {
+            return@withContext AuthResult(isSuccess = false, errorMessage = "Sesi login Supabase tidak ditemukan")
+        }
+        try {
+            val url = "${SupabaseConfig.PROJECT_URL}/auth/v1/user"
+            val bodyObj = JsonObject().apply {
+                addProperty("password", newPassword.trim())
+            }
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("apikey", SupabaseConfig.PUBLISHABLE_KEY)
+                .addHeader("Authorization", "Bearer $token")
+                .addHeader("Content-Type", "application/json")
+                .put(gson.toJson(bodyObj).toRequestBody(jsonMediaType))
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val resBody = response.body?.string() ?: ""
+                if (response.isSuccessful) {
+                    AuthResult(isSuccess = true)
+                } else {
+                    AuthResult(isSuccess = false, errorMessage = parseErrorMessage(resBody, response.code))
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "Update password error", e)
+            AuthResult(isSuccess = false, errorMessage = e.localizedMessage ?: "Gagal mengubah password di server")
+        }
+    }
+
+    // 3d. Send Password Recovery Email
+    suspend fun recoverPassword(email: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val cleanEmail = email.trim().lowercase()
+            if (cleanEmail.isBlank()) return@withContext false
+            val url = "${SupabaseConfig.PROJECT_URL}/auth/v1/recover"
+            val bodyObj = JsonObject().apply {
+                addProperty("email", cleanEmail)
+            }
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("apikey", SupabaseConfig.PUBLISHABLE_KEY)
+                .addHeader("Content-Type", "application/json")
+                .post(gson.toJson(bodyObj).toRequestBody(jsonMediaType))
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                Log.d(tag, "Recover password response (${response.code})")
+                response.isSuccessful
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "Recover password error", e)
+            false
+        }
+    }
+
     // 4. Get User Profile from Supabase Database
     suspend fun getProfile(userId: String, token: String?): UserProfile? = withContext(Dispatchers.IO) {
         try {
@@ -186,11 +288,11 @@ class SupabaseService {
 
                 val obj = jsonArr[0].asJsonObject
                 UserProfile(
-                    username = obj.get("name")?.asString ?: "User",
-                    email = obj.get("email")?.asString ?: "",
-                    challenge = obj.get("biggest_challenge")?.asString ?: "Speaking Flawlessly",
-                    mainLanguage = obj.get("main_language")?.asString ?: "English",
-                    photoUri = obj.get("photo_url")?.asString?.ifBlank { null }
+                    username = obj.optString("name") ?: "User",
+                    email = obj.optString("email") ?: "",
+                    challenge = obj.optString("biggest_challenge") ?: "Speaking Flawlessly",
+                    mainLanguage = obj.optString("main_language") ?: "English",
+                    photoUri = obj.optString("photo_url")?.ifBlank { null }
                 )
             }
         } catch (e: Exception) {
@@ -301,13 +403,18 @@ class SupabaseService {
         }
     }
 
+    data class InsertSessionResult(
+        val isSuccess: Boolean,
+        val remoteId: String? = null
+    )
+
     // 8. Insert Practice Session into Supabase Database
     suspend fun insertPracticeSession(
         userId: String,
         session: PracticeSession,
         audioCloudUrl: String?,
         token: String?
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): InsertSessionResult = withContext(Dispatchers.IO) {
         try {
             val url = "${SupabaseConfig.PROJECT_URL}/rest/v1/practice_sessions"
             val bodyObj = JsonObject().apply {
@@ -339,7 +446,7 @@ class SupabaseService {
                 .url(url)
                 .addHeader("apikey", SupabaseConfig.PUBLISHABLE_KEY)
                 .addHeader("Content-Type", "application/json")
-                .addHeader("Prefer", "return=minimal")
+                .addHeader("Prefer", "return=representation")
                 .post(gson.toJson(bodyObj).toRequestBody(jsonMediaType))
 
             if (!token.isNullOrBlank()) {
@@ -347,19 +454,30 @@ class SupabaseService {
             }
 
             client.newCall(reqBuilder.build()).execute().use { response ->
+                val resBody = response.body?.string() ?: ""
                 Log.d(tag, "Insert session response (${response.code})")
-                response.isSuccessful
+                if (!response.isSuccessful) {
+                    return@withContext InsertSessionResult(isSuccess = false)
+                }
+                val remoteId = try {
+                    val arr = JsonParser.parseString(resBody).asJsonArray
+                    if (arr.size() > 0) arr[0].asJsonObject.optString("id") else null
+                } catch (_: Exception) {
+                    null
+                }
+                InsertSessionResult(isSuccess = true, remoteId = remoteId)
             }
         } catch (e: Exception) {
             Log.e(tag, "Failed to insert session to Supabase", e)
-            false
+            InsertSessionResult(isSuccess = false)
         }
     }
 
-    // 9. Get Practice Sessions from Supabase Database
-    suspend fun getPracticeSessions(userId: String, token: String?): List<PracticeSession> = withContext(Dispatchers.IO) {
+    // 9. Get Practice Sessions from Supabase Database (null indicates request error)
+    suspend fun getPracticeSessions(userId: String, token: String?): List<PracticeSession>? = withContext(Dispatchers.IO) {
         try {
-            val url = "${SupabaseConfig.PROJECT_URL}/rest/v1/practice_sessions?user_id=eq.$userId&order=created_at.desc"
+            val encodedUserId = URLEncoder.encode(userId, "UTF-8")
+            val url = "${SupabaseConfig.PROJECT_URL}/rest/v1/practice_sessions?user_id=eq.$encodedUserId&order=created_at.desc"
             val reqBuilder = Request.Builder()
                 .url(url)
                 .addHeader("apikey", SupabaseConfig.PUBLISHABLE_KEY)
@@ -370,38 +488,48 @@ class SupabaseService {
             }
 
             client.newCall(reqBuilder.build()).execute().use { response ->
-                if (!response.isSuccessful) return@withContext emptyList()
-                val resBody = response.body?.string() ?: return@withContext emptyList()
+                if (!response.isSuccessful) return@withContext null
+                val resBody = response.body?.string() ?: return@withContext null
                 val jsonArr = JsonParser.parseString(resBody).asJsonArray
                 val list = mutableListOf<PracticeSession>()
+                val baseNow = System.currentTimeMillis()
 
                 for (i in 0 until jsonArr.size()) {
                     val obj = jsonArr[i].asJsonObject
+                    val remoteId = obj.optString("id")
+                    val createdAtStr = obj.optString("created_at")
+                    val parsedTimestamp = parseIsoTimestamp(createdAtStr) ?: (baseNow - (i * 1000L))
+                    val wpmCategory = obj.optString("wpm_category") ?: "Optimal (Ideal)"
+                    val deliveryStatus = obj.optString("delivery_status") ?: wpmCategory
+
                     list.add(
                         PracticeSession(
-                            id = (i + 1).toLong(),
-                            title = obj.get("title")?.asString ?: "Practice Session",
-                            timestamp = System.currentTimeMillis(),
-                            formattedDate = obj.get("formatted_date")?.asString ?: "",
-                            formattedTime = obj.get("formatted_time")?.asString ?: "",
-                            durationSeconds = obj.get("duration_seconds")?.asInt ?: 0,
-                            language = obj.get("language")?.asString ?: "English",
-                            practiceType = obj.get("practice_type")?.asString ?: "Open Presentation",
-                            audioPath = obj.get("audio_url")?.asString,
-                            transcript = obj.get("transcript")?.asString ?: "",
-                            wordCount = obj.get("word_count")?.asInt ?: 0,
-                            wpm = obj.get("wpm")?.asInt ?: 0,
-                            wpmCategory = obj.get("wpm_category")?.asString ?: "Ideal",
-                            fillerCount = obj.get("filler_count")?.asInt ?: 0,
-                            fillerPercentage = obj.get("filler_percentage")?.asFloat ?: 0f,
-                            fillerStatus = obj.get("filler_status")?.asString ?: "Baik",
-                            grammarScore = obj.get("grammar_score")?.asInt ?: 85,
-                            feedbackOriginal = obj.get("original_sentence")?.asString ?: "",
-                            feedbackCorrection = obj.get("corrected_sentence")?.asString ?: "",
-                            feedbackReason = obj.get("correction_reason")?.asString ?: "",
-                            feedbackSummary = obj.get("summary_feedback")?.asString ?: "",
-                            overallScore = obj.get("overall_score")?.asInt ?: 85,
-                            scoreLabel = obj.get("score_label")?.asString ?: "GREAT"
+                            id = -(i + 1).toLong(),
+                            remoteId = remoteId,
+                            title = obj.optString("title") ?: "Practice Session",
+                            timestamp = parsedTimestamp,
+                            formattedDate = obj.optString("formatted_date") ?: "",
+                            formattedTime = obj.optString("formatted_time") ?: "",
+                            durationSeconds = obj.optInt("duration_seconds") ?: 0,
+                            language = obj.optString("language") ?: "English",
+                            practiceType = obj.optString("practice_type") ?: "Open Presentation (No Limit)",
+                            audioPath = obj.optString("audio_url")?.ifBlank { null },
+                            transcript = obj.optString("transcript") ?: "",
+                            wordCount = obj.optInt("word_count") ?: 0,
+                            wpm = obj.optInt("wpm") ?: 0,
+                            wpmCategory = wpmCategory,
+                            fillerCount = obj.optInt("filler_count") ?: 0,
+                            fillerPercentage = obj.optFloat("filler_percentage") ?: 0f,
+                            fillerStatus = obj.optString("filler_status") ?: "Baik",
+                            fillerDetailsJson = obj.optString("filler_details_json") ?: "[]",
+                            grammarScore = obj.optInt("grammar_score") ?: 85,
+                            deliveryStatus = deliveryStatus,
+                            feedbackOriginal = obj.optString("original_sentence") ?: "",
+                            feedbackCorrection = obj.optString("corrected_sentence") ?: "",
+                            feedbackReason = obj.optString("correction_reason") ?: "",
+                            feedbackSummary = obj.optString("summary_feedback") ?: "",
+                            overallScore = obj.optInt("overall_score") ?: 85,
+                            scoreLabel = obj.optString("score_label") ?: "GREAT"
                         )
                     )
                 }
@@ -409,8 +537,101 @@ class SupabaseService {
             }
         } catch (e: Exception) {
             Log.e(tag, "Failed to get sessions from Supabase", e)
-            emptyList()
+            null
         }
+    }
+
+    // 10. Update Practice Session Title in Supabase
+    suspend fun updatePracticeSessionTitle(
+        remoteId: String,
+        userId: String,
+        newTitle: String,
+        token: String?
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val encodedId = URLEncoder.encode(remoteId, "UTF-8")
+            val encodedUserId = URLEncoder.encode(userId, "UTF-8")
+            val url = "${SupabaseConfig.PROJECT_URL}/rest/v1/practice_sessions?id=eq.$encodedId&user_id=eq.$encodedUserId"
+            val bodyObj = JsonObject().apply {
+                addProperty("title", newTitle)
+            }
+            val reqBuilder = Request.Builder()
+                .url(url)
+                .addHeader("apikey", SupabaseConfig.PUBLISHABLE_KEY)
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Prefer", "return=minimal")
+                .patch(gson.toJson(bodyObj).toRequestBody(jsonMediaType))
+
+            if (!token.isNullOrBlank()) {
+                reqBuilder.addHeader("Authorization", "Bearer $token")
+            }
+
+            client.newCall(reqBuilder.build()).execute().use { response ->
+                Log.d(tag, "Update session title response (${response.code})")
+                response.isSuccessful
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to update session title in Supabase", e)
+            false
+        }
+    }
+
+    // 11. Delete Practice Session from Supabase
+    suspend fun deletePracticeSession(
+        remoteId: String,
+        userId: String,
+        token: String?
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val encodedId = URLEncoder.encode(remoteId, "UTF-8")
+            val encodedUserId = URLEncoder.encode(userId, "UTF-8")
+            val url = "${SupabaseConfig.PROJECT_URL}/rest/v1/practice_sessions?id=eq.$encodedId&user_id=eq.$encodedUserId"
+            val reqBuilder = Request.Builder()
+                .url(url)
+                .addHeader("apikey", SupabaseConfig.PUBLISHABLE_KEY)
+                .addHeader("Prefer", "return=minimal")
+                .delete()
+
+            if (!token.isNullOrBlank()) {
+                reqBuilder.addHeader("Authorization", "Bearer $token")
+            }
+
+            client.newCall(reqBuilder.build()).execute().use { response ->
+                Log.d(tag, "Delete session response (${response.code})")
+                response.isSuccessful
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to delete session from Supabase", e)
+            false
+        }
+    }
+
+    private fun parseIsoTimestamp(iso: String?): Long? {
+        if (iso.isNullOrBlank()) return null
+        return try {
+            OffsetDateTime.parse(iso).toInstant().toEpochMilli()
+        } catch (_: Exception) {
+            try {
+                Instant.parse(iso).toEpochMilli()
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    private fun JsonObject.optString(key: String): String? {
+        val el = get(key) ?: return null
+        return if (el.isJsonNull) null else el.asString
+    }
+
+    private fun JsonObject.optInt(key: String): Int? {
+        val el = get(key) ?: return null
+        return if (el.isJsonNull) null else try { el.asInt } catch (_: Exception) { null }
+    }
+
+    private fun JsonObject.optFloat(key: String): Float? {
+        val el = get(key) ?: return null
+        return if (el.isJsonNull) null else try { el.asFloat } catch (_: Exception) { null }
     }
 
     private fun parseErrorMessage(body: String, code: Int): String {

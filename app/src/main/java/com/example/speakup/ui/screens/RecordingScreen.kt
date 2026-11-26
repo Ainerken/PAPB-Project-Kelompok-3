@@ -1,6 +1,10 @@
 package com.example.speakup.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -23,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.example.speakup.service.AudioRecordingService
 import com.example.speakup.service.RealtimeSpeechRecognizer
 import com.example.speakup.ui.components.WaveformVisualizer
@@ -50,8 +55,38 @@ fun RecordingScreen(
 
     var showTooShortDialog by remember { mutableStateOf(false) }
     var isFinishedSuccessfully by remember { mutableStateOf(false) }
+    val isElevatorPitch = practiceType.startsWith("Elevator", ignoreCase = true)
 
-    LaunchedEffect(Unit) {
+    fun finishSession(overrideDuration: Int? = null) {
+        if (isFinishedSuccessfully) return
+        isFinishedSuccessfully = true
+        val recognizedText = speechRecognizer.stopListening()
+        val result = recordingService.stopRecording()
+        val finalDuration = overrideDuration ?: result.durationSeconds.coerceAtLeast(durationSeconds)
+        onRecordingFinished(result.filePath, finalDuration, recognizedText)
+    }
+
+    var hasMicPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasMicPermission = granted
+        if (!granted) {
+            Toast.makeText(context, strings.cannotAccessMic, Toast.LENGTH_SHORT).show()
+            onCancel()
+        }
+    }
+
+    LaunchedEffect(hasMicPermission) {
+        if (!hasMicPermission) {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            return@LaunchedEffect
+        }
         val started = recordingService.startRecording()
         if (!started) {
             Toast.makeText(context, strings.cannotAccessMic, Toast.LENGTH_SHORT).show()
@@ -61,12 +96,20 @@ fun RecordingScreen(
         }
     }
 
+    LaunchedEffect(durationSeconds, isElevatorPitch, isFinishedSuccessfully) {
+        if (isElevatorPitch && !isFinishedSuccessfully && durationSeconds >= 60) {
+            showTooShortDialog = false
+            finishSession(60)
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             if (!isFinishedSuccessfully) {
                 recordingService.cancelRecording()
                 speechRecognizer.cancelListening()
             }
+            recordingService.releaseScope()
         }
     }
 
@@ -196,9 +239,10 @@ fun RecordingScreen(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                // Digital Timer
-                val minutes = durationSeconds / 60
-                val seconds = durationSeconds % 60
+                // Digital Timer (count-down 60s for Elevator Pitch, count-up for Open Presentation)
+                val displaySeconds = if (isElevatorPitch) (60 - durationSeconds).coerceAtLeast(0) else durationSeconds
+                val minutes = displaySeconds / 60
+                val seconds = displaySeconds % 60
                 val timerText = String.format(Locale.US, "%02d:%02d", minutes, seconds)
 
                 Text(
@@ -343,10 +387,7 @@ fun RecordingScreen(
                             if (durationSeconds < 5) {
                                 showTooShortDialog = true
                             } else {
-                                isFinishedSuccessfully = true
-                                val recognizedText = speechRecognizer.stopListening()
-                                val result = recordingService.stopRecording()
-                                onRecordingFinished(result.filePath, durationSeconds, recognizedText)
+                                finishSession()
                             }
                         },
                     contentAlignment = Alignment.Center

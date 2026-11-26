@@ -2,6 +2,7 @@ package com.example.speakup.data.repository
 
 import android.content.ContentValues
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import com.example.speakup.data.db.AppDatabaseHelper
 import com.example.speakup.data.model.PracticeSession
@@ -17,12 +18,13 @@ class SessionRepository(context: Context) {
     private val userRepo = UserRepository(context.applicationContext)
     private val tag = "SessionRepository"
 
-    suspend fun insertSession(session: PracticeSession): Long = withContext(Dispatchers.IO) {
-        val db = dbHelper.writableDatabase
-        val userId = userRepo.getUserId()
-        val userEmail = userRepo.getUserEmail() ?: "imran@student.ub.ac.id"
-
-        val values = ContentValues().apply {
+    private fun buildSessionContentValues(
+        session: PracticeSession,
+        userId: String?,
+        userEmail: String
+    ): ContentValues {
+        return ContentValues().apply {
+            put(AppDatabaseHelper.COL_REMOTE_ID, session.remoteId)
             put(AppDatabaseHelper.COL_SESSION_USER_ID, userId ?: "demo_user")
             put(AppDatabaseHelper.COL_SESSION_USER_EMAIL, userEmail)
             put(AppDatabaseHelper.COL_TITLE, session.title)
@@ -50,11 +52,19 @@ class SessionRepository(context: Context) {
             put(AppDatabaseHelper.COL_FEEDBACK_REASON, session.feedbackReason)
             put(AppDatabaseHelper.COL_FEEDBACK_SUMMARY, session.feedbackSummary)
         }
+    }
+
+    suspend fun insertSession(session: PracticeSession): Long = withContext(Dispatchers.IO) {
+        val db = dbHelper.writableDatabase
+        val userId = userRepo.getUserId()
+        val userEmail = userRepo.getUserEmail() ?: "imran@student.ub.ac.id"
+
+        val values = buildSessionContentValues(session, userId, userEmail)
         val localId = db.insert(AppDatabaseHelper.TABLE_SESSIONS, null, values)
 
         // Sync to Supabase Cloud Database & Storage
         try {
-            val token = userRepo.getAuthToken()
+            var token = userRepo.getAuthToken()
 
             if (!userId.isNullOrBlank()) {
                 var cloudAudioUrl: String? = null
@@ -62,10 +72,32 @@ class SessionRepository(context: Context) {
                     val localAudioFile = File(session.audioPath)
                     if (localAudioFile.exists()) {
                         cloudAudioUrl = supabaseService.uploadAudio(userId, localAudioFile, token)
+                        if (cloudAudioUrl == null) {
+                            token = userRepo.refreshAccessToken() ?: token
+                            cloudAudioUrl = supabaseService.uploadAudio(userId, localAudioFile, token)
+                        }
                     }
                 }
-                val inserted = supabaseService.insertPracticeSession(userId, session, cloudAudioUrl, token)
-                Log.d(tag, "Session synced to Supabase: $inserted, Audio Cloud: $cloudAudioUrl")
+                var insertResult = supabaseService.insertPracticeSession(userId, session, cloudAudioUrl, token)
+                if (!insertResult.isSuccess) {
+                    val refreshed = userRepo.refreshAccessToken()
+                    if (!refreshed.isNullOrBlank()) {
+                        token = refreshed
+                        insertResult = supabaseService.insertPracticeSession(userId, session, cloudAudioUrl, token)
+                    }
+                }
+                if (insertResult.isSuccess && !insertResult.remoteId.isNullOrBlank()) {
+                    val updateVals = ContentValues().apply {
+                        put(AppDatabaseHelper.COL_REMOTE_ID, insertResult.remoteId)
+                    }
+                    db.update(
+                        AppDatabaseHelper.TABLE_SESSIONS,
+                        updateVals,
+                        "${AppDatabaseHelper.COL_ID} = ?",
+                        arrayOf(localId.toString())
+                    )
+                }
+                Log.d(tag, "Session synced to Supabase: ${insertResult.isSuccess}, remoteId=${insertResult.remoteId}, Audio Cloud: $cloudAudioUrl")
             }
         } catch (e: Exception) {
             Log.w(tag, "Failed to sync session to Supabase in background", e)
@@ -77,23 +109,28 @@ class SessionRepository(context: Context) {
     suspend fun getAllSessions(): List<PracticeSession> = withContext(Dispatchers.IO) {
         val userId = userRepo.getUserId()
         val userEmail = userRepo.getUserEmail()
-        val token = userRepo.getAuthToken()
+        var token = userRepo.getAuthToken()
 
-        val list = mutableListOf<PracticeSession>()
-
-        // 1. Fetch remote sessions from Supabase for this user (if logged in to Supabase)
+        // 1. Fetch remote sessions from Supabase for this user and reconcile with SQLite cache
         if (!userId.isNullOrBlank()) {
             try {
-                val cloudSessions = supabaseService.getPracticeSessions(userId, token)
-                if (cloudSessions.isNotEmpty()) {
-                    list.addAll(cloudSessions)
+                var cloudSessions = supabaseService.getPracticeSessions(userId, token)
+                if (cloudSessions == null) {
+                    val refreshed = userRepo.refreshAccessToken()
+                    if (!refreshed.isNullOrBlank()) {
+                        token = refreshed
+                        cloudSessions = supabaseService.getPracticeSessions(userId, token)
+                    }
+                }
+                if (cloudSessions != null) {
+                    syncCloudSessionsToLocal(dbHelper.writableDatabase, userId, userEmail ?: "", cloudSessions)
                 }
             } catch (e: Exception) {
                 Log.w(tag, "Failed to fetch cloud sessions", e)
             }
         }
 
-        // 2. Query local SQLite sessions strictly scoped to current user
+        // 2. Query local SQLite sessions strictly scoped to current user (unique COL_ID guaranteed)
         val db = dbHelper.readableDatabase
         val selection: String
         val selectionArgs: Array<String>?
@@ -113,6 +150,7 @@ class SessionRepository(context: Context) {
             selectionArgs = null
         }
 
+        val list = mutableListOf<PracticeSession>()
         val cursor = db.query(
             AppDatabaseHelper.TABLE_SESSIONS,
             null,
@@ -124,18 +162,96 @@ class SessionRepository(context: Context) {
         )
         cursor.use {
             while (it.moveToNext()) {
-                val localSession = dbHelper.mapCursorToSession(it)
-                val duplicate = list.any { s ->
-                    s.title.equals(localSession.title, ignoreCase = true) &&
-                    s.formattedDate == localSession.formattedDate &&
-                    s.formattedTime == localSession.formattedTime
-                }
-                if (!duplicate) {
-                    list.add(localSession)
-                }
+                list.add(dbHelper.mapCursorToSession(it))
             }
         }
-        list.sortedByDescending { it.timestamp }
+        list.distinctBy { it.id }.sortedByDescending { it.timestamp }
+    }
+
+    private fun syncCloudSessionsToLocal(
+        db: SQLiteDatabase,
+        userId: String,
+        userEmail: String,
+        cloudSessions: List<PracticeSession>
+    ) {
+        val cloudRemoteIds = cloudSessions.mapNotNull { it.remoteId }.toSet()
+
+        // Remove cached rows that were deleted on the server
+        if (cloudRemoteIds.isNotEmpty()) {
+            val placeholders = cloudRemoteIds.joinToString(",") { "?" }
+            db.delete(
+                AppDatabaseHelper.TABLE_SESSIONS,
+                "${AppDatabaseHelper.COL_SESSION_USER_ID} = ? AND ${AppDatabaseHelper.COL_REMOTE_ID} IS NOT NULL AND ${AppDatabaseHelper.COL_REMOTE_ID} NOT IN ($placeholders)",
+                arrayOf(userId) + cloudRemoteIds.toTypedArray()
+            )
+        } else {
+            db.delete(
+                AppDatabaseHelper.TABLE_SESSIONS,
+                "${AppDatabaseHelper.COL_SESSION_USER_ID} = ? AND ${AppDatabaseHelper.COL_REMOTE_ID} IS NOT NULL",
+                arrayOf(userId)
+            )
+        }
+
+        for (cloud in cloudSessions) {
+            var existingId: Long? = null
+            var existingLocalAudio: String? = null
+            var existingDetailsJson: String? = null
+
+            if (!cloud.remoteId.isNullOrBlank()) {
+                db.query(
+                    AppDatabaseHelper.TABLE_SESSIONS,
+                    arrayOf(AppDatabaseHelper.COL_ID, AppDatabaseHelper.COL_AUDIO_PATH, AppDatabaseHelper.COL_FILLER_DETAILS_JSON),
+                    "${AppDatabaseHelper.COL_REMOTE_ID} = ? AND ${AppDatabaseHelper.COL_SESSION_USER_ID} = ?",
+                    arrayOf(cloud.remoteId, userId),
+                    null, null, null
+                ).use { c ->
+                    if (c.moveToFirst()) {
+                        existingId = c.getLong(0)
+                        existingLocalAudio = c.getString(1)
+                        existingDetailsJson = c.getString(2)
+                    }
+                }
+            }
+
+            if (existingId == null) {
+                db.query(
+                    AppDatabaseHelper.TABLE_SESSIONS,
+                    arrayOf(AppDatabaseHelper.COL_ID, AppDatabaseHelper.COL_AUDIO_PATH, AppDatabaseHelper.COL_FILLER_DETAILS_JSON),
+                    "${AppDatabaseHelper.COL_SESSION_USER_ID} = ? AND ${AppDatabaseHelper.COL_TITLE} = ? AND ${AppDatabaseHelper.COL_FORMATTED_DATE} = ? AND ${AppDatabaseHelper.COL_FORMATTED_TIME} = ?",
+                    arrayOf(userId, cloud.title, cloud.formattedDate, cloud.formattedTime),
+                    null, null, null
+                ).use { c ->
+                    if (c.moveToFirst()) {
+                        existingId = c.getLong(0)
+                        existingLocalAudio = c.getString(1)
+                        existingDetailsJson = c.getString(2)
+                    }
+                }
+            }
+
+            if (existingId != null) {
+                val keepLocalAudio = !existingLocalAudio.isNullOrBlank() && File(existingLocalAudio!!).exists()
+                val updateVals = ContentValues().apply {
+                    put(AppDatabaseHelper.COL_REMOTE_ID, cloud.remoteId)
+                    put(AppDatabaseHelper.COL_TITLE, cloud.title)
+                    if (!keepLocalAudio && !cloud.audioPath.isNullOrBlank()) {
+                        put(AppDatabaseHelper.COL_AUDIO_PATH, cloud.audioPath)
+                    }
+                    if (existingDetailsJson.isNullOrBlank() || existingDetailsJson == "[]") {
+                        put(AppDatabaseHelper.COL_FILLER_DETAILS_JSON, cloud.fillerDetailsJson)
+                    }
+                }
+                db.update(
+                    AppDatabaseHelper.TABLE_SESSIONS,
+                    updateVals,
+                    "${AppDatabaseHelper.COL_ID} = ?",
+                    arrayOf(existingId.toString())
+                )
+            } else {
+                val insertVals = buildSessionContentValues(cloud, userId, userEmail)
+                db.insert(AppDatabaseHelper.TABLE_SESSIONS, null, insertVals)
+            }
+        }
     }
 
     suspend fun getSessionsByLanguage(language: String): List<PracticeSession> = withContext(Dispatchers.IO) {
@@ -167,6 +283,7 @@ class SessionRepository(context: Context) {
     }
 
     suspend fun updateSessionTitle(id: Long, newTitle: String): Boolean = withContext(Dispatchers.IO) {
+        val existing = getSessionById(id)
         val db = dbHelper.writableDatabase
         val values = ContentValues().apply {
             put(AppDatabaseHelper.COL_TITLE, newTitle)
@@ -177,16 +294,45 @@ class SessionRepository(context: Context) {
             "${AppDatabaseHelper.COL_ID} = ?",
             arrayOf(id.toString())
         )
+
+        val userId = userRepo.getUserId()
+        val remoteId = existing?.remoteId
+        if (!remoteId.isNullOrBlank() && !userId.isNullOrBlank()) {
+            var token = userRepo.getAuthToken()
+            var ok = supabaseService.updatePracticeSessionTitle(remoteId, userId, newTitle, token)
+            if (!ok) {
+                val refreshed = userRepo.refreshAccessToken()
+                if (!refreshed.isNullOrBlank()) {
+                    token = refreshed
+                    supabaseService.updatePracticeSessionTitle(remoteId, userId, newTitle, token)
+                }
+            }
+        }
         rows > 0
     }
 
     suspend fun deleteSession(id: Long): Boolean = withContext(Dispatchers.IO) {
+        val existing = getSessionById(id)
         val db = dbHelper.writableDatabase
         val rows = db.delete(
             AppDatabaseHelper.TABLE_SESSIONS,
             "${AppDatabaseHelper.COL_ID} = ?",
             arrayOf(id.toString())
         )
+
+        val userId = userRepo.getUserId()
+        val remoteId = existing?.remoteId
+        if (!remoteId.isNullOrBlank() && !userId.isNullOrBlank()) {
+            var token = userRepo.getAuthToken()
+            var ok = supabaseService.deletePracticeSession(remoteId, userId, token)
+            if (!ok) {
+                val refreshed = userRepo.refreshAccessToken()
+                if (!refreshed.isNullOrBlank()) {
+                    token = refreshed
+                    supabaseService.deletePracticeSession(remoteId, userId, token)
+                }
+            }
+        }
         rows > 0
     }
 
@@ -209,13 +355,17 @@ class SessionRepository(context: Context) {
         val highest = sessions.maxOf { it.overallScore }
         val bestSession = sessions.maxByOrNull { it.overallScore }
         val avgWpm = sessions.map { it.wpm }.average().toInt()
-        val idealCount = sessions.count { it.wpmCategory == "Ideal" }
-        val fluidity = if (total > 0) ((idealCount.toFloat() / total) * 100).toInt() else 85
+        val idealCount = sessions.count {
+            it.wpm in 110..150 ||
+                it.wpmCategory.contains("Ideal", ignoreCase = true) ||
+                it.wpmCategory.contains("Optimal", ignoreCase = true)
+        }
+        val fluidity = if (total > 0) ((idealCount.toFloat() / total) * 100).toInt() else 0
 
         WeeklyStats(
             trainingTotals = total,
             improvementPercent = (avgScore - 50).coerceIn(10, 95),
-            fluidityPercent = fluidity.coerceIn(40, 98),
+            fluidityPercent = fluidity.coerceIn(0, 100),
             averagePaceWpm = avgWpm,
             highestScore = highest,
             personalBestSessionName = bestSession?.title ?: "Recent Practice",

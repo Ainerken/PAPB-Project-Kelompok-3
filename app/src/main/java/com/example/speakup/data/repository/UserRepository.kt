@@ -79,7 +79,7 @@ class UserRepository(context: Context) {
                 .putString(KEY_SUPABASE_REFRESH_TOKEN, result.refreshToken)
                 .putString(KEY_SUPABASE_USER_ID, result.userId)
                 .putString(KEY_SUPABASE_USER_EMAIL, result.email)
-                .putString(KEY_USER_PASSWORD, pass)
+                .remove(KEY_USER_PASSWORD)
                 .putBoolean(KEY_IS_LOGGED_IN, true)
                 .apply()
 
@@ -113,7 +113,7 @@ class UserRepository(context: Context) {
                 .putString(KEY_SUPABASE_REFRESH_TOKEN, result.refreshToken)
                 .putString(KEY_SUPABASE_USER_ID, result.userId)
                 .putString(KEY_SUPABASE_USER_EMAIL, result.email)
-                .putString(KEY_USER_PASSWORD, pass)
+                .remove(KEY_USER_PASSWORD)
                 .putBoolean(KEY_IS_LOGGED_IN, true)
                 .apply()
 
@@ -146,25 +146,86 @@ class UserRepository(context: Context) {
             .remove(KEY_SUPABASE_REFRESH_TOKEN)
             .remove(KEY_SUPABASE_USER_ID)
             .remove(KEY_SUPABASE_USER_EMAIL)
+            .remove(KEY_USER_PASSWORD)
             .putBoolean(KEY_IS_LOGGED_IN, false)
             .apply()
+        updateLocalProfile(UserProfile())
+    }
+
+    suspend fun refreshAccessToken(): String? = withContext(Dispatchers.IO) {
+        val refreshToken = prefs.getString(KEY_SUPABASE_REFRESH_TOKEN, null) ?: return@withContext null
+        val res = supabaseService.refreshSession(refreshToken)
+        if (res.isSuccess && !res.accessToken.isNullOrBlank()) {
+            prefs.edit()
+                .putString(KEY_SUPABASE_TOKEN, res.accessToken)
+                .putString(KEY_SUPABASE_REFRESH_TOKEN, res.refreshToken ?: refreshToken)
+                .apply()
+            res.accessToken
+        } else {
+            null
+        }
+    }
+
+    suspend fun changePassword(currentPassword: String, newPassword: String): Pair<Boolean, String?> = withContext(Dispatchers.IO) {
+        val userId = getUserId()
+        val email = getUserEmail()
+        if (!userId.isNullOrBlank() && !email.isNullOrBlank()) {
+            val verifyRes = supabaseService.signIn(email, currentPassword)
+            if (!verifyRes.isSuccess) {
+                return@withContext Pair(false, verifyRes.errorMessage ?: "WRONG_CURRENT_PASSWORD")
+            }
+            val freshToken = verifyRes.accessToken ?: getAuthToken()
+            if (!freshToken.isNullOrBlank()) {
+                prefs.edit()
+                    .putString(KEY_SUPABASE_TOKEN, freshToken)
+                    .putString(KEY_SUPABASE_REFRESH_TOKEN, verifyRes.refreshToken)
+                    .apply()
+            }
+            val updateRes = supabaseService.updatePassword(newPassword, freshToken)
+            if (updateRes.isSuccess) {
+                Pair(true, null)
+            } else {
+                Pair(false, updateRes.errorMessage)
+            }
+        } else {
+            // Demo / offline mode
+            if (currentPassword != getPassword()) {
+                Pair(false, "WRONG_CURRENT_PASSWORD")
+            } else {
+                setPassword(newPassword)
+                Pair(true, null)
+            }
+        }
+    }
+
+    suspend fun requestPasswordRecovery(email: String): Boolean = withContext(Dispatchers.IO) {
+        supabaseService.recoverPassword(email)
     }
 
     suspend fun getUserProfile(): UserProfile = withContext(Dispatchers.IO) {
         val userId = getUserId()
         val token = getAuthToken()
+        val local = getLocalProfile()
 
         // Try getting remote profile from Supabase first
         if (!userId.isNullOrBlank()) {
             val remote = supabaseService.getProfile(userId, token)
+                ?: refreshAccessToken()?.let { newToken -> supabaseService.getProfile(userId, newToken) }
             if (remote != null) {
-                updateLocalProfile(remote)
-                return@withContext remote
+                val merged = remote.copy(
+                    role = local.role,
+                    confidence = local.confidence,
+                    targetScenario = local.targetScenario,
+                    frequency = local.frequency,
+                    feedbackTone = local.feedbackTone
+                )
+                updateLocalProfile(merged)
+                return@withContext merged
             }
         }
 
         // Fallback to SQLite
-        getLocalProfile()
+        local
     }
 
     private fun getLocalProfile(): UserProfile {

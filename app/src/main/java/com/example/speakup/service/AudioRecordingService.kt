@@ -34,25 +34,36 @@ class AudioRecordingService(private val context: Context) {
             val targetFile = outputFile!!
 
             fun createAndStartRecorder(source: Int): MediaRecorder {
-                return (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     MediaRecorder(context)
                 } else {
                     @Suppress("DEPRECATION")
                     MediaRecorder()
-                }).apply {
-                    setAudioSource(source)
-                    setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                    setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                    setAudioEncodingBitRate(128000)
-                    setAudioSamplingRate(44100)
-                    setOutputFile(targetFile.absolutePath)
-                    prepare()
-                    start()
+                }
+                return try {
+                    recorder.apply {
+                        setAudioSource(source)
+                        setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                        setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                        setAudioEncodingBitRate(128000)
+                        setAudioSamplingRate(44100)
+                        setOutputFile(targetFile.absolutePath)
+                        prepare()
+                        start()
+                    }
+                } catch (e: Exception) {
+                    try {
+                        recorder.reset()
+                        recorder.release()
+                    } catch (_: Exception) {}
+                    throw e
                 }
             }
 
             mediaRecorder = try {
                 createAndStartRecorder(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+            } catch (e: SecurityException) {
+                throw e
             } catch (e: Exception) {
                 targetFile.delete()
                 createAndStartRecorder(MediaRecorder.AudioSource.MIC)
@@ -62,6 +73,7 @@ class AudioRecordingService(private val context: Context) {
             isRecording = true
             _recordingDurationSeconds.value = 0
 
+            durationJob?.cancel()
             durationJob = scope.launch {
                 while (isRecording) {
                     val elapsed = (SystemClock.elapsedRealtime() - startTimeMillis) / 1000
@@ -77,13 +89,9 @@ class AudioRecordingService(private val context: Context) {
                 }
             }
             return true
-        } catch (e: IOException) {
+        } catch (e: Exception) {
             e.printStackTrace()
-            stopRecording()
-            return false
-        } catch (e: IllegalStateException) {
-            e.printStackTrace()
-            stopRecording()
+            cancelRecording()
             return false
         }
     }
@@ -132,6 +140,12 @@ class AudioRecordingService(private val context: Context) {
         mediaRecorder = null
         outputFile?.delete()
         outputFile = null
+    }
+
+    fun releaseScope() {
+        isRecording = false
+        durationJob?.cancel()
+        scope.cancel()
     }
 
     data class RecordingResult(

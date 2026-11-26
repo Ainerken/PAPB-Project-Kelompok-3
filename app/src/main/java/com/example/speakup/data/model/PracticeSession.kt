@@ -25,7 +25,8 @@ data class PracticeSession(
     val feedbackOriginal: String = "",
     val feedbackCorrection: String = "",
     val feedbackReason: String = "",
-    val feedbackSummary: String = ""
+    val feedbackSummary: String = "",
+    val remoteId: String? = null
 )
 
 data class FillerWordMatch(

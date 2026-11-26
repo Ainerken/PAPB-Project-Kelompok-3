@@ -50,6 +50,7 @@ fun ProcessingScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
     val userRepo = remember { UserRepository(context) }
     val sessionRepo = remember { SessionRepository(context) }
     val sttEngine = remember { SpeechToTextEngine(context) }
@@ -69,14 +70,18 @@ fun ProcessingScreen(
     var allowSimulationFallback by remember { mutableStateOf(false) }
     var processingTrigger by remember { mutableIntStateOf(0) }
 
-    var sttSubtitle by remember { mutableStateOf("Processing audio...") }
-    var fillerSubtitle by remember { mutableStateOf("Calculating filler words...") }
-    var pacingSubtitle by remember { mutableStateOf("Analyzing pacing...") }
-    var grammarSubtitle by remember { mutableStateOf("Evaluating grammar...") }
-    var feedbackSubtitle by remember { mutableStateOf("Preparing feedback...") }
+    var sttSubtitle by remember { mutableStateOf(if (strings.isIndonesian) "Memproses audio..." else "Processing audio...") }
+    var fillerSubtitle by remember { mutableStateOf(if (strings.isIndonesian) "Menghitung kata pengisi..." else "Calculating filler words...") }
+    var pacingSubtitle by remember { mutableStateOf(if (strings.isIndonesian) "Menganalisis tempo..." else "Analyzing pacing...") }
+    var grammarSubtitle by remember { mutableStateOf(if (strings.isIndonesian) "Mengevaluasi tata bahasa..." else "Evaluating grammar...") }
+    var feedbackSubtitle by remember { mutableStateOf(if (strings.isIndonesian) "Menyusun saran..." else "Preparing feedback...") }
 
     // Execute processing flow
     LaunchedEffect(processingTrigger) {
+        currentStep = 1
+        isDone = false
+        sttErrorCode = null
+        sttErrorMessage = null
         try {
             // Step 1: STT
             delay(800)
@@ -238,11 +243,20 @@ fun ProcessingScreen(
     if (showApiKeyInputDialog) {
         AlertDialog(
             onDismissRequest = { showApiKeyInputDialog = false },
-            title = { Text("Masukkan Gemini API Key", fontWeight = FontWeight.Bold, color = PrimaryNavyText) },
+            title = {
+                Text(
+                    if (strings.isIndonesian) "Masukkan Gemini API Key" else "Enter Gemini API Key",
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavyText
+                )
+            },
             text = {
                 Column {
                     Text(
-                        "Masukkan API Key gratis dari Google AI Studio (aistudio.google.com) agar rekaman audio Anda ditranskripsi otomatis oleh model Gemini AI:",
+                        if (strings.isIndonesian)
+                            "Masukkan API Key gratis dari Google AI Studio (aistudio.google.com) agar rekaman audio Anda ditranskripsi otomatis oleh model Gemini AI:"
+                        else
+                            "Enter your free Google AI Studio API Key (aistudio.google.com) so your recording is transcribed automatically by Gemini AI:",
                         fontSize = 13.sp,
                         color = TextSecondary
                     )
@@ -270,12 +284,15 @@ fun ProcessingScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                 ) {
-                    Text("Transkripsi dengan AI", color = Color.White)
+                    Text(
+                        if (strings.isIndonesian) "Transkripsi dengan AI" else "Transcribe with AI",
+                        color = Color.White
+                    )
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showApiKeyInputDialog = false }) {
-                    Text("Batal", color = TextMuted)
+                    Text(strings.cancel, color = TextMuted)
                 }
             },
             containerColor = SurfaceWhite
@@ -286,12 +303,19 @@ fun ProcessingScreen(
         AlertDialog(
             onDismissRequest = { },
             title = {
-                Text("Kendala Gemini AI Transcription", fontWeight = FontWeight.Bold, color = PrimaryNavyText)
+                Text(
+                    if (strings.isIndonesian) "Kendala Gemini AI Transcription" else "Gemini AI Transcription Issue",
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavyText
+                )
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Gagal mentranskripsi file suara lewat Gemini AI:",
+                        if (strings.isIndonesian)
+                            "Gagal mentranskripsi file suara lewat Gemini AI:"
+                        else
+                            "Failed to transcribe audio via Gemini AI:",
                         fontSize = 13.sp,
                         color = TextSecondary
                     )
@@ -301,14 +325,20 @@ fun ProcessingScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = sttErrorMessage ?: "API Key tidak valid atau batas kuota tercapai.",
+                            text = sttErrorMessage ?: if (strings.isIndonesian)
+                                "API Key tidak valid atau batas kuota tercapai."
+                            else
+                                "Invalid API Key or quota limit reached.",
                             fontSize = 12.sp,
                             color = Color(0xFFB91C1C),
                             modifier = Modifier.padding(10.dp)
                         )
                     }
                     Text(
-                        "Pastikan API Key Anda aktif di Google AI Studio (aistudio.google.com). Anda dapat mengubah API Key sekarang atau menggunakan simulasi untuk melanjutkan evaluasi.",
+                        if (strings.isIndonesian)
+                            "Pastikan API Key Anda aktif di Google AI Studio (aistudio.google.com). Anda dapat mengubah API Key sekarang atau menggunakan simulasi untuk melanjutkan evaluasi."
+                        else
+                            "Ensure your API Key is active in Google AI Studio (aistudio.google.com). You can update your API Key now or use a sample simulation to continue.",
                         fontSize = 12.sp,
                         color = TextMuted
                     )
@@ -327,7 +357,10 @@ fun ProcessingScreen(
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                     ) {
-                        Text("Perbaiki API Key", color = Color.White)
+                        Text(
+                            if (strings.isIndonesian) "Perbaiki API Key" else "Update API Key",
+                            color = Color.White
+                        )
                     }
 
                     OutlinedButton(
@@ -337,7 +370,7 @@ fun ProcessingScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Coba Lagi", color = PrimaryNavyText)
+                        Text(strings.retry, color = PrimaryNavyText)
                     }
 
                     TextButton(
@@ -348,7 +381,10 @@ fun ProcessingScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Gunakan Contoh Simulasi", color = PrimaryBlue)
+                        Text(
+                            if (strings.isIndonesian) "Gunakan Contoh Simulasi" else "Use Sample Simulation",
+                            color = PrimaryBlue
+                        )
                     }
 
                     TextButton(
@@ -358,7 +394,7 @@ fun ProcessingScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Batal", color = TextMuted)
+                        Text(strings.cancel, color = TextMuted)
                     }
                 }
             },
@@ -371,12 +407,19 @@ fun ProcessingScreen(
         AlertDialog(
             onDismissRequest = { },
             title = {
-                Text("Audio Tidak Berisi Suara", fontWeight = FontWeight.Bold, color = PrimaryNavyText)
+                Text(
+                    if (strings.isIndonesian) "Audio Tidak Berisi Suara" else "No Speech Audio Captured",
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavyText
+                )
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "File rekaman suara berhasil dibuat, namun tidak ada gelombang ucapan manusia yang tertangkap (audio hening / 0 dB).",
+                        if (strings.isIndonesian)
+                            "File rekaman suara berhasil dibuat, namun tidak ada gelombang ucapan manusia yang tertangkap (audio hening / 0 dB)."
+                        else
+                            "The audio file was created, but no human speech was detected (silent audio / 0 dB).",
                         fontSize = 13.sp,
                         color = TextSecondary
                     )
@@ -387,13 +430,16 @@ fun ProcessingScreen(
                     ) {
                         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                "💡 Tip Emulator Android Studio:",
+                                if (strings.isIndonesian) "💡 Tip Emulator Android Studio:" else "💡 Android Studio Emulator Tip:",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = PrimaryBlue
                             )
                             Text(
-                                "Buka menu titik tiga (...) pada toolbar emulator > tab 'Microphone' > aktifkan 'Virtual microphone uses host audio input' dan pastikan mic laptop/PC Anda tidak di-mute.",
+                                if (strings.isIndonesian)
+                                    "Buka menu titik tiga (...) pada toolbar emulator > tab 'Microphone' > aktifkan 'Virtual microphone uses host audio input' dan pastikan mic laptop/PC Anda tidak di-mute."
+                                else
+                                    "Open the '...' menu on the emulator toolbar > 'Microphone' tab > enable 'Virtual microphone uses host audio input' and check that your PC microphone is unmuted.",
                                 fontSize = 11.sp,
                                 color = PrimaryDarkNavy
                             )
@@ -414,7 +460,10 @@ fun ProcessingScreen(
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                     ) {
-                        Text("Rekam Ulang", color = Color.White)
+                        Text(
+                            if (strings.isIndonesian) "Rekam Ulang" else "Record Again",
+                            color = Color.White
+                        )
                     }
 
                     OutlinedButton(
@@ -425,7 +474,10 @@ fun ProcessingScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Gunakan Contoh Simulasi", color = PrimaryNavyText)
+                        Text(
+                            if (strings.isIndonesian) "Gunakan Contoh Simulasi" else "Use Sample Simulation",
+                            color = PrimaryNavyText
+                        )
                     }
 
                     TextButton(
@@ -435,7 +487,7 @@ fun ProcessingScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Batal", color = TextMuted)
+                        Text(strings.cancel, color = TextMuted)
                     }
                 }
             },
@@ -448,24 +500,52 @@ fun ProcessingScreen(
         AlertDialog(
             onDismissRequest = { },
             title = {
-                Text("Tidak Ada Ucapan Terdeteksi", fontWeight = FontWeight.Bold, color = PrimaryNavyText)
+                Text(
+                    if (strings.isIndonesian) "Tidak Ada Ucapan Terdeteksi" else "No Speech Detected",
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavyText
+                )
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Mikrofon belum menangkap suara yang jelas, dan pengenal suara perangkat (SpeechRecognizer) belum mendeteksi kata-kata.",
+                        if (strings.isIndonesian)
+                            "Mikrofon belum menangkap suara yang jelas, dan pengenal suara perangkat (SpeechRecognizer) belum mendeteksi kata-kata."
+                        else
+                            "The microphone hasn't captured clear speech yet, and the device SpeechRecognizer didn't detect words.",
                         fontSize = 13.sp,
                         color = TextSecondary
                     )
                     Text(
-                        "Pilihan yang dapat Anda lakukan:",
+                        if (strings.isIndonesian) "Pilihan yang dapat Anda lakukan:" else "Options you can take:",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = PrimaryNavyText
                     )
-                    Text("1. Masukkan Gemini API Key agar audio rekaman ditranskripsi otomatis lewat cloud AI.", fontSize = 12.sp, color = PrimaryBlue)
-                    Text("2. Coba rekam ulang dengan berbicara lebih dekat ke mikrofon.", fontSize = 12.sp, color = TextSecondary)
-                    Text("3. Gunakan simulasi contoh jika Anda ingin melihat alur evaluasi.", fontSize = 12.sp, color = TextMuted)
+                    Text(
+                        if (strings.isIndonesian)
+                            "1. Masukkan Gemini API Key agar audio rekaman ditranskripsi otomatis lewat cloud AI."
+                        else
+                            "1. Enter a Gemini API Key to transcribe the recorded audio via cloud AI.",
+                        fontSize = 12.sp,
+                        color = PrimaryBlue
+                    )
+                    Text(
+                        if (strings.isIndonesian)
+                            "2. Coba rekam ulang dengan berbicara lebih dekat ke mikrofon."
+                        else
+                            "2. Try recording again while speaking closer to the microphone.",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                    Text(
+                        if (strings.isIndonesian)
+                            "3. Gunakan simulasi contoh jika Anda ingin melihat alur evaluasi."
+                        else
+                            "3. Use a sample simulation if you want to preview the evaluation flow.",
+                        fontSize = 12.sp,
+                        color = TextMuted
+                    )
                 }
             },
             confirmButton = {
@@ -480,7 +560,10 @@ fun ProcessingScreen(
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                     ) {
-                        Text("Gunakan Gemini AI Audio", color = Color.White)
+                        Text(
+                            if (strings.isIndonesian) "Gunakan Gemini AI Audio" else "Use Gemini AI Audio",
+                            color = Color.White
+                        )
                     }
 
                     OutlinedButton(
@@ -490,7 +573,10 @@ fun ProcessingScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Rekam Ulang", color = PrimaryNavyText)
+                        Text(
+                            if (strings.isIndonesian) "Rekam Ulang" else "Record Again",
+                            color = PrimaryNavyText
+                        )
                     }
 
                     TextButton(
@@ -501,7 +587,10 @@ fun ProcessingScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Gunakan Contoh Simulasi", color = TextMuted)
+                        Text(
+                            if (strings.isIndonesian) "Gunakan Contoh Simulasi" else "Use Sample Simulation",
+                            color = TextMuted
+                        )
                     }
                 }
             },
@@ -514,11 +603,18 @@ fun ProcessingScreen(
         AlertDialog(
             onDismissRequest = { showErrorDialog = false },
             title = {
-                Text("Koneksi/API bermasalah", fontWeight = FontWeight.Bold, color = PrimaryNavyText)
+                Text(
+                    if (strings.isIndonesian) "Koneksi/API bermasalah" else "Connection / API Issue",
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryNavyText
+                )
             },
             text = {
                 Text(
-                    "Terjadi kendala saat memproses rekaman atau memanggil API. Anda dapat mencoba kembali atau membatalkan proses.",
+                    sttErrorMessage ?: if (strings.isIndonesian)
+                        "Terjadi kendala saat memproses rekaman atau memanggil API. Anda dapat mencoba kembali atau membatalkan proses."
+                    else
+                        "An issue occurred while processing the recording or calling the API. You can retry or cancel.",
                     color = TextSecondary
                 )
             },
@@ -526,11 +622,12 @@ fun ProcessingScreen(
                 Button(
                     onClick = {
                         showErrorDialog = false
+                        processingTrigger++
                         onErrorRetry()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                 ) {
-                    Text("Coba Lagi", color = Color.White)
+                    Text(strings.retry, color = Color.White)
                 }
             },
             dismissButton = {
@@ -540,7 +637,7 @@ fun ProcessingScreen(
                         onCancel()
                     }
                 ) {
-                    Text("Batal", color = TextMuted)
+                    Text(strings.cancel, color = TextMuted)
                 }
             },
             containerColor = SurfaceWhite
@@ -583,7 +680,11 @@ fun ProcessingScreen(
                 Spacer(modifier = Modifier.height(22.dp))
 
                 Text(
-                    text = if (isDone) "Your Evaluation is Ready" else "Analyzing Your Speech...",
+                    text = if (isDone) {
+                        if (strings.isIndonesian) "Evaluasi Anda Sudah Siap" else "Your Evaluation is Ready"
+                    } else {
+                        strings.analyzingSpeech
+                    },
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavyText
@@ -592,7 +693,7 @@ fun ProcessingScreen(
                 if (isDone) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "All step is done",
+                        text = if (strings.isIndonesian) "Semua langkah selesai" else "All step is done",
                         fontSize = 15.sp,
                         color = TextSecondary
                     )
@@ -607,7 +708,7 @@ fun ProcessingScreen(
                 // 1. Speech-to-Text
                 ProcessingStepItem(
                     stepNumber = "1",
-                    title = "Speech-to-Text (STT)",
+                    title = strings.stepStt,
                     subtitle = sttSubtitle,
                     isCompleted = currentStep > 1
                 )
@@ -619,7 +720,7 @@ fun ProcessingScreen(
                 ) {
                     ProcessingStepItem(
                         stepNumber = "2",
-                        title = "Filler Word Analysis",
+                        title = strings.stepFiller,
                         subtitle = fillerSubtitle,
                         isCompleted = currentStep > 2
                     )
@@ -632,7 +733,7 @@ fun ProcessingScreen(
                 ) {
                     ProcessingStepItem(
                         stepNumber = "3",
-                        title = "AI Pacing",
+                        title = strings.stepPacing,
                         subtitle = pacingSubtitle,
                         isCompleted = currentStep > 3
                     )
@@ -645,7 +746,7 @@ fun ProcessingScreen(
                 ) {
                     ProcessingStepItem(
                         stepNumber = "4",
-                        title = "Grammar Evaluation",
+                        title = strings.stepGrammar,
                         subtitle = grammarSubtitle,
                         isCompleted = currentStep > 4
                     )
@@ -658,7 +759,7 @@ fun ProcessingScreen(
                 ) {
                     ProcessingStepItem(
                         stepNumber = "5",
-                        title = "Feedback",
+                        title = strings.stepFeedback,
                         subtitle = feedbackSubtitle,
                         isCompleted = currentStep > 5
                     )
@@ -677,7 +778,7 @@ fun ProcessingScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                 ) {
                     Text(
-                        text = "Go to Session Evaluation",
+                        text = if (strings.isIndonesian) "Lihat Hasil Evaluasi" else "Go to Session Evaluation",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White

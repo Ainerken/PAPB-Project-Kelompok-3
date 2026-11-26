@@ -45,6 +45,7 @@ fun SessionEvaluationScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
     val sessionRepo = remember { SessionRepository(context) }
     val playbackService = remember { AudioPlaybackService(context) }
     val coroutineScope = rememberCoroutineScope()
@@ -76,7 +77,7 @@ fun SessionEvaluationScreen(
     if (isEditingTitle) {
         AlertDialog(
             onDismissRequest = { isEditingTitle = false },
-            title = { Text("Edit Session Title", fontWeight = FontWeight.Bold, color = PrimaryNavyText) },
+            title = { Text(strings.editSessionTitle, fontWeight = FontWeight.Bold, color = PrimaryNavyText) },
             text = {
                 OutlinedTextField(
                     value = titleInput,
@@ -100,12 +101,12 @@ fun SessionEvaluationScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                 ) {
-                    Text("Save", color = Color.White)
+                    Text(strings.save, color = Color.White)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { isEditingTitle = false }) {
-                    Text("Cancel", color = TextMuted)
+                    Text(strings.cancel, color = TextMuted)
                 }
             },
             containerColor = SurfaceWhite
@@ -139,7 +140,7 @@ fun SessionEvaluationScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                     ) {
                         Text(
-                            text = "Practice Again",
+                            text = strings.practiceAgain,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -152,7 +153,7 @@ fun SessionEvaluationScreen(
                             .weight(0.9f)
                             .height(52.dp)
                             .clickable {
-                                Toast.makeText(context, "Session saved successfully!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, strings.sessionSavedSuccess, Toast.LENGTH_SHORT).show()
                                 onSaveFinished()
                             },
                         shape = RoundedCornerShape(16.dp),
@@ -164,7 +165,7 @@ fun SessionEvaluationScreen(
                             modifier = Modifier.fillMaxSize()
                         ) {
                             Text(
-                                text = "Save",
+                                text = strings.save,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = PrimaryNavyText
@@ -204,7 +205,7 @@ fun SessionEvaluationScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Close,
-                                contentDescription = "Close",
+                                contentDescription = strings.close,
                                 tint = PrimaryNavyText,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -229,7 +230,7 @@ fun SessionEvaluationScreen(
                             Spacer(modifier = Modifier.width(6.dp))
                             Icon(
                                 imageVector = Icons.Filled.Edit,
-                                contentDescription = "Edit Title",
+                                contentDescription = strings.editTitle,
                                 tint = PrimaryNavyText,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -253,7 +254,7 @@ fun SessionEvaluationScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Overall Session Score",
+                                    text = strings.overallSessionScore,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = TextMuted
@@ -286,19 +287,41 @@ fun SessionEvaluationScreen(
                                 currentSession.overallScore >= 60 -> Color(0xFFD97706)
                                 else -> Color(0xFFDC2626)
                             }
-                            val headline = when {
-                                currentSession.overallScore >= 90 -> "Outstanding Delivery!"
-                                currentSession.overallScore >= 80 -> "Impressive Delivery!"
-                                currentSession.overallScore >= 70 -> "Solid Practice Session!"
-                                currentSession.overallScore >= 55 -> "Room for Improvement"
-                                else -> "Needs Focused Practice"
+                            val isIndonesian = strings.isIndonesian || currentSession.scoreLabel in listOf("SANGAT BAIK", "BAGUS", "CUKUP BAIK", "CUKUP", "PERLU DITINGKATKAN", "KURANG")
+                            val headline = if (isIndonesian) {
+                                when {
+                                    currentSession.overallScore >= 90 -> "Penyampaian Luar Biasa!"
+                                    currentSession.overallScore >= 80 -> "Penyampaian Sangat Baik!"
+                                    currentSession.overallScore >= 70 -> "Latihan Cukup Baik!"
+                                    currentSession.overallScore >= 55 -> "Perlu Sedikit Peningkatan"
+                                    else -> "Perlu Latihan Lebih Terfokus"
+                                }
+                            } else {
+                                when {
+                                    currentSession.overallScore >= 90 -> "Outstanding Delivery!"
+                                    currentSession.overallScore >= 80 -> "Impressive Delivery!"
+                                    currentSession.overallScore >= 70 -> "Solid Practice Session!"
+                                    currentSession.overallScore >= 55 -> "Room for Improvement"
+                                    else -> "Needs Focused Practice"
+                                }
                             }
-                            val subtitle = when {
-                                currentSession.fillerPercentage > 15f -> "Tingkat kata pengisi sangat tinggi (${currentSession.fillerPercentage}%). Ganti kata pengisi dengan jeda hening sejenak."
-                                currentSession.fillerPercentage > 7f -> "Terdeteksi ${currentSession.fillerCount} kata pengisi (${currentSession.fillerPercentage}%). Kurangi pengulangan kata untuk kesan profesional."
-                                currentSession.wpm < 110 -> "Tempo bicara Anda lambat (${currentSession.wpm} WPM). Tingkatkan ritme bicara dan keyakinan artikulasi."
-                                currentSession.wpm > 165 -> "Tempo bicara Anda terlalu cepat (${currentSession.wpm} WPM). Berikan jeda nafas antar kalimat."
-                                else -> "Tempo bicara dan artikulasi Anda seimbang pada ${currentSession.wpm} WPM."
+
+                            val subtitle = if (isIndonesian) {
+                                when {
+                                    currentSession.fillerPercentage > 15f -> "Tingkat kata pengisi sangat tinggi (${currentSession.fillerPercentage}%). Ganti kata pengisi dengan jeda hening sejenak."
+                                    currentSession.fillerPercentage > 7f -> "Terdeteksi ${currentSession.fillerCount} kata pengisi (${currentSession.fillerPercentage}%). Kurangi pengulangan kata untuk kesan profesional."
+                                    currentSession.wpm < 110 -> "Tempo bicara Anda lambat (${currentSession.wpm} WPM). Tingkatkan ritme bicara dan keyakinan artikulasi."
+                                    currentSession.wpm > 165 -> "Tempo bicara Anda terlalu cepat (${currentSession.wpm} WPM). Berikan jeda nafas antar kalimat."
+                                    else -> "Tempo bicara dan artikulasi Anda seimbang pada ${currentSession.wpm} WPM."
+                                }
+                            } else {
+                                when {
+                                    currentSession.fillerPercentage > 15f -> "Filler word rate is very high (${currentSession.fillerPercentage}%). Replace filler words with brief silent pauses."
+                                    currentSession.fillerPercentage > 7f -> "Detected ${currentSession.fillerCount} filler words (${currentSession.fillerPercentage}%). Reduce repetitions for a professional tone."
+                                    currentSession.wpm < 110 -> "Speaking pace is slow (${currentSession.wpm} WPM). Increase your pace and articulation confidence."
+                                    currentSession.wpm > 165 -> "Speaking pace is too fast (${currentSession.wpm} WPM). Take breathing pauses between sentences."
+                                    else -> "Speaking pace and articulation are balanced at ${currentSession.wpm} WPM."
+                                }
                             }
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -364,7 +387,7 @@ fun SessionEvaluationScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Speaking Pace (WPM)",
+                                    text = strings.speakingPaceWpm,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = PrimaryNavyText
@@ -395,7 +418,7 @@ fun SessionEvaluationScreen(
                                     color = PrimaryNavyText
                                 )
                                 Text(
-                                    text = "Words Per Minute",
+                                    text = strings.wordsPerMinuteLabel,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = TextSecondary,
@@ -425,7 +448,7 @@ fun SessionEvaluationScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Transcript",
+                                    text = strings.transcript,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = PrimaryNavyText
@@ -439,7 +462,7 @@ fun SessionEvaluationScreen(
                                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                             val clip = ClipData.newPlainText("Transcript", currentSession.transcript)
                                             clipboard.setPrimaryClip(clip)
-                                            Toast.makeText(context, "Transcript copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, strings.transcriptCopied, Toast.LENGTH_SHORT).show()
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -486,7 +509,7 @@ fun SessionEvaluationScreen(
                     ) {
                         Column(modifier = Modifier.padding(18.dp)) {
                             Text(
-                                text = "Feedback",
+                                text = strings.feedbackTitle,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = PrimaryNavyText
@@ -519,7 +542,7 @@ fun SessionEvaluationScreen(
 
                             // Reason
                             Text(
-                                text = "Reason: ${currentSession.feedbackReason}",
+                                text = "${strings.reason}: ${currentSession.feedbackReason}",
                                 fontSize = 12.sp,
                                 lineHeight = 17.sp,
                                 color = TextSecondary
@@ -528,7 +551,7 @@ fun SessionEvaluationScreen(
                             if (isFeedbackExpanded && currentSession.feedbackSummary.isNotBlank()) {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "Coach Note: ${currentSession.feedbackSummary}",
+                                    text = "${strings.coachNote}: ${currentSession.feedbackSummary}",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = PrimaryBlue
@@ -544,7 +567,7 @@ fun SessionEvaluationScreen(
                                     .padding(vertical = 4.dp, horizontal = 4.dp)
                             ) {
                                 Text(
-                                    text = if (isFeedbackExpanded) "Read Less" else "Read More",
+                                    text = if (isFeedbackExpanded) strings.readLess else strings.readMore,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = PrimaryBlue

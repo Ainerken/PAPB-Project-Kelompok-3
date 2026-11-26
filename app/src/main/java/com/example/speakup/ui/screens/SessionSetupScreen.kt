@@ -1,7 +1,6 @@
 package com.example.speakup.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -29,7 +28,8 @@ fun SessionSetupScreen(
     onStartRecording: (language: String, practiceType: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedLanguage by remember { mutableStateOf(initialLanguage) }
+    val strings = LocalAppStrings.current
+    var selectedLanguage by remember(initialLanguage) { mutableStateOf(initialLanguage) }
     var selectedPracticeType by remember { mutableStateOf("Open Presentation (No Limit)") }
 
     Scaffold(
@@ -58,7 +58,7 @@ fun SessionSetupScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = strings.back,
                             tint = PrimaryNavyText
                         )
                     }
@@ -66,7 +66,7 @@ fun SessionSetupScreen(
                     Spacer(modifier = Modifier.weight(1f))
 
                     Text(
-                        text = "Session Setup",
+                        text = strings.sessionSetupTitle,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavyText
@@ -80,7 +80,7 @@ fun SessionSetupScreen(
 
                 // 1. Select Practice Language
                 Text(
-                    text = "1. Select Practice Language",
+                    text = strings.selectLanguageTitle,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavyText
@@ -109,14 +109,14 @@ fun SessionSetupScreen(
                             Text(text = "🇬🇧", fontSize = 28.sp)
                             Spacer(modifier = Modifier.height(14.dp))
                             Text(
-                                text = "English",
+                                text = strings.langEnglish,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = PrimaryNavyText
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "um, uh, you know",
+                                text = strings.langEnglishSub,
                                 fontSize = 12.sp,
                                 color = MetricPaceColor
                             )
@@ -140,14 +140,14 @@ fun SessionSetupScreen(
                             Text(text = "🇮🇩", fontSize = 28.sp)
                             Spacer(modifier = Modifier.height(14.dp))
                             Text(
-                                text = "Indonesian",
+                                text = strings.langIndonesian,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = PrimaryNavyText
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "eeee, umm, eh",
+                                text = strings.langIndonesianSub,
                                 fontSize = 12.sp,
                                 color = MetricPaceColor
                             )
@@ -159,7 +159,7 @@ fun SessionSetupScreen(
 
                 // 2. Practice Type
                 Text(
-                    text = "2. Practice Type",
+                    text = strings.selectPracticeTypeTitle,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavyText
@@ -179,7 +179,7 @@ fun SessionSetupScreen(
                     shadowElevation = 2.dp
                 ) {
                     Text(
-                        text = "Open Presentation (No Limit)",
+                        text = strings.openPresentation,
                         fontSize = 14.sp,
                         fontWeight = if (isOpen) FontWeight.Bold else FontWeight.Medium,
                         color = if (isOpen) PrimaryNavyText else TextSecondary,
@@ -201,7 +201,7 @@ fun SessionSetupScreen(
                     shadowElevation = 2.dp
                 ) {
                     Text(
-                        text = "Elevator Pitch (1 Minute)",
+                        text = strings.elevatorPitch,
                         fontSize = 14.sp,
                         fontWeight = if (isPitch) FontWeight.Bold else FontWeight.Medium,
                         color = if (isPitch) PrimaryNavyText else TextSecondary,
@@ -228,7 +228,7 @@ fun SessionSetupScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Helpful Speaking Tip",
+                                text = strings.helpfulTipTitle,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF92400E)
@@ -238,7 +238,7 @@ fun SessionSetupScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = "Take a deep breath before you start. Speak for at least 5 seconds so our algorithm can accurately measure your pace and rhythm.",
+                            text = strings.helpfulTipDesc,
                             fontSize = 13.sp,
                             lineHeight = 19.sp,
                             color = Color(0xFF92400E).copy(alpha = 0.9f)
@@ -265,7 +265,7 @@ fun SessionSetupScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Mic,
-                        contentDescription = "Start Recording",
+                        contentDescription = strings.startRecordingButton,
                         tint = Color.White,
                         modifier = Modifier.size(36.dp)
                     )
@@ -274,7 +274,7 @@ fun SessionSetupScreen(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
-                    text = "Tap when ready",
+                    text = strings.tapWhenReady,
                     fontSize = 13.sp,
                     color = TextMuted
                 )

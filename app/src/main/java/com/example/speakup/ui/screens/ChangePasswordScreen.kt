@@ -33,6 +33,7 @@ fun ChangePasswordScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
     val userRepo = remember { UserRepository(context) }
 
     var oldPassword by remember { mutableStateOf("password123") }
@@ -71,7 +72,7 @@ fun ChangePasswordScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = strings.back,
                             tint = PrimaryNavyText
                         )
                     }
@@ -79,7 +80,7 @@ fun ChangePasswordScreen(
                     Spacer(modifier = Modifier.weight(1f))
 
                     Text(
-                        text = "Change Password",
+                        text = strings.changePassword,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavyText
@@ -121,7 +122,7 @@ fun ChangePasswordScreen(
                         modifier = Modifier.padding(20.dp)
                     ) {
                         Text(
-                            text = "Old Password",
+                            text = strings.oldPasswordLabel,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = PrimaryNavyText
@@ -145,7 +146,7 @@ fun ChangePasswordScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
-                            text = "New Password",
+                            text = strings.newPasswordLabel,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = PrimaryNavyText
@@ -169,7 +170,7 @@ fun ChangePasswordScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
-                            text = "Confirm New Password",
+                            text = strings.confirmPasswordLabel,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = PrimaryNavyText
@@ -195,10 +196,10 @@ fun ChangePasswordScreen(
                         Button(
                             onClick = {
                                 if (newPassword != confirmNewPassword) {
-                                    Toast.makeText(context, "Password baru tidak sama", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, strings.passwordsDoNotMatch, Toast.LENGTH_SHORT).show()
                                 } else {
                                     userRepo.setPassword(newPassword)
-                                    Toast.makeText(context, "Password berhasil diubah!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, strings.passwordChangedSuccess, Toast.LENGTH_SHORT).show()
                                     onBack()
                                 }
                             },
@@ -210,7 +211,7 @@ fun ChangePasswordScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                         ) {
                             Text(
-                                text = "Change Password",
+                                text = strings.changePassword,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -227,7 +228,7 @@ fun ChangePasswordScreen(
                     .clickable { onNavigateToForgotPassword() }
             ) {
                 Text(
-                    text = "Forgot Password?",
+                    text = strings.forgotPasswordPrompt,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryBlue

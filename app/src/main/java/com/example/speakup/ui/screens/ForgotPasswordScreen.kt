@@ -33,6 +33,7 @@ fun ForgotPasswordScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
     val userRepo = remember { UserRepository(context) }
 
     var email by remember { mutableStateOf("imran@student.ub.ac.id") }
@@ -72,7 +73,7 @@ fun ForgotPasswordScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = strings.back,
                             tint = PrimaryNavyText
                         )
                     }
@@ -80,7 +81,7 @@ fun ForgotPasswordScreen(
                     Spacer(modifier = Modifier.weight(1f))
 
                     Text(
-                        text = "Forgot Password",
+                        text = if (strings.isIndonesian) "Lupa Kata Sandi" else "Forgot Password",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavyText
@@ -134,7 +135,7 @@ fun ForgotPasswordScreen(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             singleLine = true,
-                            placeholder = { Text("enter your email", color = TextMuted) },
+                            placeholder = { Text(if (strings.isIndonesian) "masukkan email Anda" else "enter your email", color = TextMuted) },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedContainerColor = Color(0xFFF1F5F9),
                                 unfocusedContainerColor = Color(0xFFF1F5F9),
@@ -146,7 +147,7 @@ fun ForgotPasswordScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
-                            text = "Email Verification Code",
+                            text = strings.verificationCodeLabel,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = PrimaryNavyText
@@ -162,7 +163,7 @@ fun ForgotPasswordScreen(
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(12.dp),
                                 singleLine = true,
-                                placeholder = { Text("enter the code", color = TextMuted) },
+                                placeholder = { Text(strings.enterCodePlaceholder, color = TextMuted) },
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedContainerColor = Color(0xFFF1F5F9),
                                     unfocusedContainerColor = Color(0xFFF1F5F9),
@@ -178,12 +179,12 @@ fun ForgotPasswordScreen(
                                     .padding(horizontal = 16.dp, vertical = 14.dp)
                                     .clickable {
                                         code = "9281"
-                                        Toast.makeText(context, "Kode verifikasi: 9281", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, strings.codeSentToast("9281"), Toast.LENGTH_SHORT).show()
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "Send",
+                                    text = strings.sendCodeButton,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = PrimaryNavyText
@@ -194,7 +195,7 @@ fun ForgotPasswordScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
-                            text = "Password",
+                            text = strings.passwordLabel,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = PrimaryNavyText
@@ -218,7 +219,7 @@ fun ForgotPasswordScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
-                            text = "Confirm Password",
+                            text = strings.confirmPasswordLabel,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = PrimaryNavyText
@@ -244,10 +245,10 @@ fun ForgotPasswordScreen(
                         Button(
                             onClick = {
                                 if (password != confirmPassword) {
-                                    Toast.makeText(context, "Password konfirmasi tidak sama", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, strings.passwordsDoNotMatch, Toast.LENGTH_SHORT).show()
                                 } else {
                                     userRepo.setPassword(password)
-                                    Toast.makeText(context, "Password baru berhasil disimpan!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, strings.passwordChangedSuccess, Toast.LENGTH_SHORT).show()
                                     onSuccess()
                                 }
                             },
@@ -259,7 +260,7 @@ fun ForgotPasswordScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                         ) {
                             Text(
-                                text = "Confirm",
+                                text = strings.confirmButton,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White

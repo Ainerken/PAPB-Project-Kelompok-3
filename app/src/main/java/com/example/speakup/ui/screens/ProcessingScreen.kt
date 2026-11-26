@@ -42,6 +42,7 @@ fun ProcessingScreen(
     durationSeconds: Int,
     language: String,
     practiceType: String,
+    userMainLanguage: String = "English",
     recognizedTranscript: String = "",
     onComplete: (sessionId: Long) -> Unit,
     onErrorRetry: () -> Unit,
@@ -101,32 +102,39 @@ fun ProcessingScreen(
             }
             val transcript = sttResult.transcript
             val wordCount = sttResult.wordCount
-            sttSubtitle = "$wordCount words recognized"
+            val actualMainLang = if (userMainLanguage.isNotBlank()) userMainLanguage else userRepo.getUserProfile().mainLanguage
+            val isMainIndonesian = actualMainLang.startsWith("Indo", ignoreCase = true)
+
+            sttSubtitle = if (isMainIndonesian) "$wordCount kata dikenali" else "$wordCount words recognized"
             currentStep = 2
 
             // Step 2: Filler Words Analysis
             delay(700)
             val fillerAnalysis = FillerWordAnalyzer.analyze(transcript, language)
             val fillerCount = fillerAnalysis.fillerCount
-            fillerSubtitle = "$fillerCount Filler Words Detected"
+            fillerSubtitle = if (isMainIndonesian) "$fillerCount Kata Pengisi Terdeteksi" else "$fillerCount Filler Words Detected"
             currentStep = 3
 
             // Step 3: Pacing Calculation
             delay(600)
-            val pacingResult = PacingCalculator.calculate(wordCount, durationSeconds)
+            val pacingResult = PacingCalculator.calculate(wordCount, durationSeconds, actualMainLang)
             val wpm = pacingResult.wpm
-            pacingSubtitle = "$wpm WPM Calculated"
+            pacingSubtitle = if (isMainIndonesian) "$wpm WPM Dihitung" else "$wpm WPM Calculated"
             currentStep = 4
 
             // Step 4: Grammar Evaluation
             delay(800)
-            val aiResult = aiEngine.evaluateGrammarAndStructure(transcript, language)
-            grammarSubtitle = "Grammar Checked"
+            val aiResult = aiEngine.evaluateGrammarAndStructure(
+                transcript = transcript,
+                language = language,
+                userMainLanguage = actualMainLang
+            )
+            grammarSubtitle = if (isMainIndonesian) "Tata Bahasa & Saran AI Siap" else "Grammar Checked"
             currentStep = 5
 
             // Step 5: Final Feedback Compilation & Persistence
             delay(600)
-            feedbackSubtitle = "Feedback ready"
+            feedbackSubtitle = if (isMainIndonesian) "Hasil evaluasi siap" else "Feedback ready"
 
             // Compute balanced, realistic overall score:
             // 35% Filler Word Fluency (fluency & control)
@@ -139,32 +147,54 @@ fun ProcessingScreen(
             val rawOverall = (fillerScore * 0.35f) + (grammarScore * 0.40f) + (pacingScore * 0.25f)
             val overallScore = kotlin.math.round(rawOverall).toInt().coerceIn(15, 98)
 
-            val scoreLabel = when {
-                overallScore >= 90 -> "EXCELLENT"
-                overallScore >= 80 -> "GREAT"
-                overallScore >= 70 -> "GOOD"
-                overallScore >= 55 -> "FAIR"
-                overallScore >= 40 -> "NEEDS IMPROVEMENT"
-                else -> "POOR"
+            // Overall score label follows the user's primary/main language
+            val scoreLabel = if (isMainIndonesian) {
+                when {
+                    overallScore >= 90 -> "SANGAT BAIK"
+                    overallScore >= 80 -> "BAGUS"
+                    overallScore >= 70 -> "CUKUP BAIK"
+                    overallScore >= 55 -> "CUKUP"
+                    overallScore >= 40 -> "PERLU DITINGKATKAN"
+                    else -> "KURANG"
+                }
+            } else {
+                when {
+                    overallScore >= 90 -> "EXCELLENT"
+                    overallScore >= 80 -> "GREAT"
+                    overallScore >= 70 -> "GOOD"
+                    overallScore >= 55 -> "FAIR"
+                    overallScore >= 40 -> "NEEDS IMPROVEMENT"
+                    else -> "POOR"
+                }
             }
 
-            // Adjust delivery status based on comprehensive metrics
-            val deliveryStatus = when {
-                fillerAnalysis.fillerPercentage > 15f -> "High Filler Pauses"
-                fillerAnalysis.fillerPercentage > 8f -> "Hesitant & Fillers"
-                pacingScore < 65 -> pacingResult.deliveryStatus
-                overallScore >= 88 -> "Steady & Composed"
-                else -> pacingResult.deliveryStatus
+            // Adjust delivery status based on comprehensive metrics following user's main language
+            val deliveryStatus = if (isMainIndonesian) {
+                when {
+                    fillerAnalysis.fillerPercentage > 15f -> "Banyak Kata Pengisi"
+                    fillerAnalysis.fillerPercentage > 8f -> "Ragu & Sering Filler"
+                    pacingScore < 65 -> pacingResult.deliveryStatusIndonesian
+                    overallScore >= 88 -> "Stabil & Percaya Diri"
+                    else -> pacingResult.deliveryStatusIndonesian
+                }
+            } else {
+                when {
+                    fillerAnalysis.fillerPercentage > 15f -> "High Filler Pauses"
+                    fillerAnalysis.fillerPercentage > 8f -> "Hesitant & Fillers"
+                    pacingScore < 65 -> pacingResult.deliveryStatus
+                    overallScore >= 88 -> "Steady & Composed"
+                    else -> pacingResult.deliveryStatus
+                }
             }
 
-            val dateFormat = SimpleDateFormat("MMM d", Locale.US)
+            val dateFormat = SimpleDateFormat("MMM d", if (isMainIndonesian) Locale("id", "ID") else Locale.US)
             val timeFormat = SimpleDateFormat("HH:mm", Locale.US)
             val now = Date()
 
             val defaultTitle = if (practiceType.startsWith("Elevator")) {
-                "Brief Interview Introduction"
+                if (isMainIndonesian) "Perkenalan Singkat (Elevator Pitch)" else "Brief Interview Introduction"
             } else {
-                if (language.startsWith("Indo", ignoreCase = true)) "Latihan Presentasi Singkat" else "Speech Practice Session"
+                if (isMainIndonesian) "Latihan Presentasi Singkat" else "Speech Practice Session"
             }
 
             val newSession = PracticeSession(

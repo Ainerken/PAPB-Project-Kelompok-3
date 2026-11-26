@@ -31,6 +31,7 @@ fun LoginScreen(
     onDemoLogin: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalAppStrings.current
     var email by remember { mutableStateOf(initialEmail) }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
@@ -77,7 +78,7 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = "Welcome Back",
+                    text = strings.welcomeBack,
                     fontSize = 26.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryNavyText
@@ -86,7 +87,7 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Sign in to continue your speech coaching",
+                    text = strings.signInSubtitle,
                     fontSize = 14.sp,
                     color = TextSecondary
                 )
@@ -104,7 +105,7 @@ fun LoginScreen(
                         modifier = Modifier.padding(20.dp)
                     ) {
                         Text(
-                            text = "Email Address",
+                            text = strings.emailAddressLabel,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = PrimaryNavyText
@@ -135,13 +136,13 @@ fun LoginScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Password",
+                                text = strings.passwordLabel,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = PrimaryNavyText
                             )
                             Text(
-                                text = "Forgot password?",
+                                text = strings.forgotPasswordPrompt,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = PrimaryBlue,
@@ -161,7 +162,7 @@ fun LoginScreen(
                             trailingIcon = {
                                 TextButton(onClick = { passwordVisible = !passwordVisible }) {
                                     Text(
-                                        text = if (passwordVisible) "Hide" else "Show",
+                                        text = if (passwordVisible) strings.hidePassword else strings.showPassword,
                                         color = PrimaryBlue,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold
@@ -169,7 +170,7 @@ fun LoginScreen(
                                 }
                             },
                             shape = RoundedCornerShape(12.dp),
-                            placeholder = { Text("Input your password", color = TextMuted) },
+                            placeholder = { Text(if (strings.isIndonesian) "Masukkan kata sandi Anda" else "Input your password", color = TextMuted) },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedContainerColor = Color(0xFFF8FAFC),
                                 unfocusedContainerColor = Color(0xFFF8FAFC),
@@ -199,7 +200,7 @@ fun LoginScreen(
                         Button(
                             onClick = {
                                 if (email.isBlank() || password.isBlank()) {
-                                    errorMessage = "Email dan password wajib diisi"
+                                    errorMessage = strings.emailPasswordRequired
                                     return@Button
                                 }
                                 isLoading = true
@@ -225,7 +226,7 @@ fun LoginScreen(
                                 )
                             } else {
                                 Text(
-                                    text = "Sign In with Supabase",
+                                    text = strings.signInButton,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -244,7 +245,7 @@ fun LoginScreen(
                 ) {
                     HorizontalDivider(modifier = Modifier.weight(1f), color = Color(0xFFE2E8F0))
                     Text(
-                        text = "  or explore  ",
+                        text = "  ${strings.orExplore}  ",
                         fontSize = 12.sp,
                         color = TextMuted
                     )
@@ -264,7 +265,7 @@ fun LoginScreen(
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
                 ) {
                     Text(
-                        text = "Masuk Langsung (Mode Demo / Offline)",
+                        text = strings.demoLoginButton,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = PrimaryNavyText
@@ -279,12 +280,12 @@ fun LoginScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Don't Have an account? ",
+                    text = strings.dontHaveAccount,
                     fontSize = 13.sp,
                     color = TextSecondary
                 )
                 Text(
-                    text = "Sign Up",
+                    text = strings.signUpLink,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryBlue,

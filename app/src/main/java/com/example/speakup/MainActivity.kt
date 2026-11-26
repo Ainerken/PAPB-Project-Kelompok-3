@@ -16,8 +16,11 @@ import com.example.speakup.data.repository.SessionRepository
 import com.example.speakup.data.repository.UserRepository
 import com.example.speakup.ui.navigation.Screen
 import com.example.speakup.ui.screens.*
+import com.example.speakup.ui.theme.AppStrings
 import com.example.speakup.ui.theme.BackgroundLight
+import com.example.speakup.ui.theme.LocalAppStrings
 import com.example.speakup.ui.theme.SpeakUpTheme
+import com.example.speakup.ui.theme.updateAppLocale
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -81,9 +84,19 @@ fun SpeakUpApp(
     var recentSessions by remember { mutableStateOf<List<PracticeSession>>(emptyList()) }
     var latestSession by remember { mutableStateOf<PracticeSession?>(null) }
 
+    // Temporary session parameters during recording workflow
+    var sessionLanguage by remember { mutableStateOf("English") }
+    var sessionPracticeType by remember { mutableStateOf("Open Presentation (No Limit)") }
+    var recordedAudioPath by remember { mutableStateOf<String?>(null) }
+    var recordedDurationSeconds by remember { mutableIntStateOf(0) }
+    var recordedRecognizedText by remember { mutableStateOf("") }
+    var evaluationSessionId by remember { mutableLongStateOf(0L) }
+
     fun refreshDashboardData() {
         coroutineScope.launch {
-            userProfile = userRepository.getUserProfile()
+            val profile = userRepository.getUserProfile()
+            userProfile = profile
+            sessionLanguage = profile.mainLanguage
             weeklyStats = sessionRepository.getWeeklyStats()
             val all = sessionRepository.getAllSessions()
             recentSessions = all
@@ -94,14 +107,6 @@ fun SpeakUpApp(
     LaunchedEffect(Unit) {
         refreshDashboardData()
     }
-
-    // Temporary session parameters during recording workflow
-    var sessionLanguage by remember { mutableStateOf("English") }
-    var sessionPracticeType by remember { mutableStateOf("Open Presentation (No Limit)") }
-    var recordedAudioPath by remember { mutableStateOf<String?>(null) }
-    var recordedDurationSeconds by remember { mutableIntStateOf(0) }
-    var recordedRecognizedText by remember { mutableStateOf("") }
-    var evaluationSessionId by remember { mutableLongStateOf(0L) }
 
     // Registration survey state
     var regUsername by remember { mutableStateOf("Imran") }
@@ -136,7 +141,19 @@ fun SpeakUpApp(
         }
     }
 
-    when (val screen = currentScreen) {
+    val currentStrings = if (userProfile.mainLanguage.startsWith("Indo", ignoreCase = true)) {
+        AppStrings.Indonesian
+    } else {
+        AppStrings.English
+    }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(userProfile.mainLanguage) {
+        updateAppLocale(userProfile.mainLanguage, context)
+    }
+
+    CompositionLocalProvider(LocalAppStrings provides currentStrings) {
+        when (val screen = currentScreen) {
         is Screen.Onboarding -> {
             OnboardingScreen(
                 onContinue = {
@@ -302,6 +319,7 @@ fun SpeakUpApp(
                 audioPath = recordedAudioPath,
                 durationSeconds = recordedDurationSeconds,
                 language = sessionLanguage,
+                userMainLanguage = userProfile.mainLanguage,
                 practiceType = sessionPracticeType,
                 recognizedTranscript = recordedRecognizedText,
                 onComplete = { newSessionId ->
@@ -364,6 +382,7 @@ fun SpeakUpApp(
                 },
                 onProfileUpdated = { updated ->
                     userProfile = updated
+                    sessionLanguage = updated.mainLanguage
                 },
                 onLogout = {
                     coroutineScope.launch {
@@ -390,4 +409,5 @@ fun SpeakUpApp(
             )
         }
     }
+}
 }

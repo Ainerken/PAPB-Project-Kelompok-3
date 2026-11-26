@@ -32,6 +32,7 @@ fun OnboardingScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -76,7 +77,7 @@ fun OnboardingScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = "YOUR POCKET VOICE MENTOR",
+                    text = strings.onboardingBadge,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = PrimaryBlue,
@@ -95,7 +96,7 @@ fun OnboardingScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "Master your speaking pace, eliminate filler words, and build confidence with gentle AI coaching.",
+                    text = strings.onboardingDesc,
                     fontSize = 15.sp,
                     color = TextSecondary,
                     textAlign = TextAlign.Center,
@@ -136,14 +137,14 @@ fun OnboardingScreen(
 
                         Column {
                             Text(
-                                text = "Microphone Access",
+                                text = strings.micAccessTitle,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = PrimaryNavyText
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Required to record your speech sessions",
+                                text = strings.micAccessDesc,
                                 fontSize = 12.sp,
                                 color = TextMuted
                             )
@@ -158,7 +159,7 @@ fun OnboardingScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "100% Privacy Protected",
+                            text = strings.privacyProtected,
                             fontSize = 12.sp,
                             color = TextMuted
                         )
@@ -170,7 +171,7 @@ fun OnboardingScreen(
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "Required",
+                                text = strings.requiredBadge,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = PrimaryBlue
@@ -202,7 +203,7 @@ fun OnboardingScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
             ) {
                 Text(
-                    text = "Allow & Enter Dashboard",
+                    text = strings.allowAndEnter,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White

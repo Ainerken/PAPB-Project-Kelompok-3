@@ -35,6 +35,7 @@ fun BottomNavBar(
     onMicClicked: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = com.example.speakup.ui.theme.LocalAppStrings.current
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -75,7 +76,7 @@ fun BottomNavBar(
                         modifier = Modifier.size(26.dp)
                     )
                     Text(
-                        text = "Home",
+                        text = strings.navHome,
                         fontSize = 11.sp,
                         fontWeight = if (isHome) FontWeight.Bold else FontWeight.Medium,
                         color = if (isHome) PrimaryBlue else TextMuted
@@ -97,12 +98,12 @@ fun BottomNavBar(
                 ) {
                     Icon(
                         imageVector = if (isHistory) Icons.Filled.Schedule else Icons.Outlined.Schedule,
-                        contentDescription = "History",
+                        contentDescription = strings.navHistory,
                         tint = if (isHistory) PrimaryBlue else TextMuted,
                         modifier = Modifier.size(26.dp)
                     )
                     Text(
-                        text = "History",
+                        text = strings.navHistory,
                         fontSize = 11.sp,
                         fontWeight = if (isHistory) FontWeight.Bold else FontWeight.Medium,
                         color = if (isHistory) PrimaryBlue else TextMuted
@@ -132,7 +133,7 @@ fun BottomNavBar(
         ) {
             Icon(
                 imageVector = Icons.Filled.Mic,
-                contentDescription = "Record",
+                contentDescription = strings.navRecord,
                 tint = Color.White,
                 modifier = Modifier.size(32.dp)
             )

@@ -40,6 +40,7 @@ fun DashboardScreen(
     onNavigateToProfile: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalAppStrings.current
     Scaffold(
         containerColor = BackgroundLight,
         bottomBar = {
@@ -69,14 +70,14 @@ fun DashboardScreen(
                 ) {
                     Column {
                         Text(
-                            text = "Hi ${userProfile.username}!",
+                            text = strings.hiUser(userProfile.username),
                             fontSize = 26.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = PrimaryNavyText
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Lets Continue our training!",
+                            text = strings.letsContinueTraining,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                             color = TextSecondary
@@ -98,8 +99,10 @@ fun DashboardScreen(
             // Card 1: Speaking Performance Card
             item {
                 val score = latestSession?.overallScore ?: 0
-                val scoreLabel = latestSession?.scoreLabel ?: "START"
-                val delivery = latestSession?.deliveryStatus ?: "Ready to Practice"
+                val defaultScoreLabel = if (strings.isIndonesian) "MULAI" else "START"
+                val defaultReady = if (strings.isIndonesian) "Siap Latihan" else "Ready to Practice"
+                val scoreLabel = latestSession?.scoreLabel ?: defaultScoreLabel
+                val delivery = latestSession?.deliveryStatus ?: defaultReady
                 val pace = latestSession?.wpm ?: 0
                 val fillers = latestSession?.fillerCount ?: 0
                 val grammar = latestSession?.grammarScore ?: 0
@@ -121,7 +124,7 @@ fun DashboardScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "SPEAKING PERFORMANCE",
+                                text = strings.speakingPerformance,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextMuted,
@@ -177,7 +180,7 @@ fun DashboardScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(MetricPaceColor))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Pace", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MetricPaceColor)
+                                    Text(strings.pace, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MetricPaceColor)
                                 }
                                 Spacer(modifier = Modifier.height(3.dp))
                                 Text("$pace WPM", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavyText)
@@ -190,10 +193,11 @@ fun DashboardScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(MetricFillersColor))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Fillers", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MetricFillersColor)
+                                    Text(strings.fillers, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MetricFillersColor)
                                 }
                                 Spacer(modifier = Modifier.height(3.dp))
-                                Text("$fillers words", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavyText)
+                                val wordSuffix = if (strings.isIndonesian) "kata" else "words"
+                                Text("$fillers $wordSuffix", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavyText)
                             }
 
                             VerticalDivider(modifier = Modifier.height(28.dp), color = Color(0xFFE2E8F0))
@@ -203,7 +207,7 @@ fun DashboardScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(MetricGrammarColor))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Grammar", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MetricGrammarColor)
+                                    Text(strings.grammar, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MetricGrammarColor)
                                 }
                                 Spacer(modifier = Modifier.height(3.dp))
                                 Text("$grammar/100", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = PrimaryNavyText)
@@ -231,7 +235,7 @@ fun DashboardScreen(
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = "Start New Session",
+                                    text = strings.startNewPractice,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -252,7 +256,7 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "This Week Performance >",
+                        text = strings.thisWeekPerformance,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavyText
@@ -282,11 +286,11 @@ fun DashboardScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.Bottom
                             ) {
-                                Text("Training Totals", fontSize = 13.sp, color = TextSecondary)
+                                Text(strings.trainingTotals, fontSize = 13.sp, color = TextSecondary)
                                 Text("${weeklyStats.trainingTotals}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = PrimaryNavyText)
                             }
                             Text(
-                                text = "↑ ${weeklyStats.improvementPercent}% improvement from last week",
+                                text = strings.improvementFromLastWeek(weeklyStats.improvementPercent),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MetricPaceColor
@@ -300,11 +304,11 @@ fun DashboardScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.Bottom
                             ) {
-                                Text("Fluidity", fontSize = 13.sp, color = TextSecondary)
+                                Text(strings.fluidity, fontSize = 13.sp, color = TextSecondary)
                                 Text("${weeklyStats.fluidityPercent}%", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = PrimaryNavyText)
                             }
                             Text(
-                                text = "Average pace ${weeklyStats.averagePaceWpm} WPM (Optimal)",
+                                text = strings.optimalPaceDesc(weeklyStats.averagePaceWpm),
                                 fontSize = 11.sp,
                                 color = TextMuted
                             )
@@ -317,11 +321,11 @@ fun DashboardScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.Bottom
                             ) {
-                                Text("Highest Score", fontSize = 13.sp, color = TextSecondary)
+                                Text(strings.highestScore, fontSize = 13.sp, color = TextSecondary)
                                 Text("${weeklyStats.highestScore}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = PrimaryNavyText)
                             }
                             Text(
-                                text = "Personal best on ${weeklyStats.personalBestSessionName}",
+                                text = strings.personalBest(weeklyStats.personalBestSessionName),
                                 fontSize = 11.sp,
                                 color = TextMuted
                             )
@@ -335,7 +339,7 @@ fun DashboardScreen(
                             modifier = Modifier.weight(0.9f)
                         ) {
                             Text(
-                                text = "AVERAGE SCORE",
+                                text = strings.averageScoreHeader,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextMuted,
@@ -381,7 +385,7 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "History >",
+                        text = strings.historyHeader,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNavyText
@@ -449,7 +453,7 @@ fun DashboardScreen(
                                     .padding(horizontal = 10.dp, vertical = 4.dp)
                             ) {
                                 Text(
-                                    text = "${sampleItem.overallScore} pts",
+                                    text = "${sampleItem.overallScore} ${strings.pts}",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = PrimaryBlue
@@ -473,14 +477,14 @@ fun DashboardScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "Belum Ada Riwayat Presentasi",
+                                text = strings.noPracticeSessionsYet,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = PrimaryNavyText
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Mulai sesi latihan pertama Anda untuk melihat evaluasi di sini.",
+                                text = strings.tapMicBelowToRecord,
                                 fontSize = 12.sp,
                                 color = TextMuted,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center

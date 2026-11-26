@@ -35,6 +35,7 @@ fun HistoryScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
     val sessionRepo = remember { SessionRepository(context) }
     val coroutineScope = rememberCoroutineScope()
 
@@ -64,8 +65,8 @@ fun HistoryScreen(
         val s = sessionToDelete!!
         AlertDialog(
             onDismissRequest = { sessionToDelete = null },
-            title = { Text("Hapus Sesi?", fontWeight = FontWeight.Bold, color = PrimaryNavyText) },
-            text = { Text("Apakah Anda yakin ingin menghapus sesi '${s.title}' dari riwayat?", color = TextSecondary) },
+            title = { Text(strings.deleteSessionTitle, fontWeight = FontWeight.Bold, color = PrimaryNavyText) },
+            text = { Text(strings.deleteSessionConfirm(s.title), color = TextSecondary) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -73,17 +74,17 @@ fun HistoryScreen(
                             sessionRepo.deleteSession(s.id)
                             sessionToDelete = null
                             refresh()
-                            Toast.makeText(context, "Sesi berhasil dihapus", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, strings.sessionDeletedSuccess, Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
                 ) {
-                    Text("Hapus", color = Color.White)
+                    Text(strings.delete, color = Color.White)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { sessionToDelete = null }) {
-                    Text("Batal", color = TextMuted)
+                    Text(strings.cancel, color = TextMuted)
                 }
             },
             containerColor = SurfaceWhite
@@ -115,7 +116,7 @@ fun HistoryScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Session History",
+                    text = strings.sessionHistoryTitle,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = PrimaryNavyText
@@ -160,7 +161,7 @@ fun HistoryScreen(
                 // All Chip
                 val isAll = selectedFilter == "All"
                 FilterChipItem(
-                    label = "All (${allSessions.size})",
+                    label = "${strings.filterAll} (${allSessions.size})",
                     isSelected = isAll,
                     onClick = { selectedFilter = "All" }
                 )
@@ -168,7 +169,7 @@ fun HistoryScreen(
                 // English Chip
                 val isEn = selectedFilter == "English"
                 FilterChipItem(
-                    label = "🇬🇧 English",
+                    label = "🇬🇧 ${strings.langEnglish}",
                     isSelected = isEn,
                     onClick = { selectedFilter = "English" }
                 )
@@ -176,7 +177,7 @@ fun HistoryScreen(
                 // Indonesian Chip
                 val isId = selectedFilter == "Indonesian"
                 FilterChipItem(
-                    label = "🇮🇩 Indonesian",
+                    label = "🇮🇩 ${strings.langIndonesian}",
                     isSelected = isId,
                     onClick = { selectedFilter = "Indonesian" }
                 )
@@ -186,7 +187,7 @@ fun HistoryScreen(
 
             // Today / History List Header
             Text(
-                text = "RECENT SESSIONS",
+                text = strings.recentSessionsHeader,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextMuted,
@@ -204,7 +205,7 @@ fun HistoryScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Belum ada rekaman sesi",
+                        text = strings.noHistoryYet,
                         fontSize = 15.sp,
                         color = TextMuted
                     )
@@ -269,7 +270,7 @@ fun HistoryScreen(
                                         )
                                         Spacer(modifier = Modifier.height(3.dp))
                                         Text(
-                                            text = "${s.formattedDate} • ${s.formattedTime} • ${s.wpm}WPM",
+                                            text = "${s.formattedDate} • ${s.formattedTime} • ${s.wpm} WPM",
                                             fontSize = 12.sp,
                                             color = TextMuted
                                         )
@@ -284,7 +285,7 @@ fun HistoryScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.DeleteOutline,
-                                            contentDescription = "Hapus",
+                                            contentDescription = strings.delete,
                                             tint = Color(0xFFEF4444).copy(alpha = 0.7f),
                                             modifier = Modifier.size(18.dp)
                                         )

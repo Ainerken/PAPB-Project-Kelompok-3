@@ -38,6 +38,7 @@ fun RecordingScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
     val recordingService = remember { AudioRecordingService(context) }
     val speechRecognizer = remember { RealtimeSpeechRecognizer(context) }
 
@@ -53,7 +54,7 @@ fun RecordingScreen(
     LaunchedEffect(Unit) {
         val started = recordingService.startRecording()
         if (!started) {
-            Toast.makeText(context, "Tidak dapat mengakses mikrofon", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, strings.cannotAccessMic, Toast.LENGTH_SHORT).show()
             onCancel()
         } else {
             speechRecognizer.startListening(language)
@@ -73,11 +74,11 @@ fun RecordingScreen(
         AlertDialog(
             onDismissRequest = { showTooShortDialog = false },
             title = {
-                Text("Rekaman Terlalu Pendek", fontWeight = FontWeight.Bold, color = PrimaryNavyText)
+                Text(strings.recordingTooShortTitle, fontWeight = FontWeight.Bold, color = PrimaryNavyText)
             },
             text = {
                 Text(
-                    "Harap berbicara minimal 5 detik agar algoritma dapat menganalisis kecepatan dan kata pengisi dengan akurat.",
+                    strings.recordingTooShortDesc,
                     color = TextSecondary
                 )
             },
@@ -86,7 +87,7 @@ fun RecordingScreen(
                     onClick = { showTooShortDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                 ) {
-                    Text("Lanjutkan Bicara", color = Color.White)
+                    Text(strings.continueSpeaking, color = Color.White)
                 }
             },
             dismissButton = {
@@ -99,7 +100,7 @@ fun RecordingScreen(
                         onCancel()
                     }
                 ) {
-                    Text("Batal", color = TextMuted)
+                    Text(strings.cancel, color = TextMuted)
                 }
             },
             containerColor = SurfaceWhite
@@ -138,7 +139,7 @@ fun RecordingScreen(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Cancel",
+                        contentDescription = strings.cancel,
                         tint = PrimaryNavyText
                     )
                 }
@@ -150,12 +151,13 @@ fun RecordingScreen(
                         .background(SurfaceWhite)
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
+                    val isIndo = language.startsWith("Indo", ignoreCase = true)
                     Text(
-                        text = if (language.startsWith("Indo", ignoreCase = true)) "🇮🇩 " else "🇬🇧 ",
+                        text = if (isIndo) "🇮🇩 " else "🇬🇧 ",
                         fontSize = 16.sp
                     )
                     Text(
-                        text = language,
+                        text = if (isIndo) strings.langIndonesian else strings.langEnglish,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = PrimaryNavyText
@@ -184,7 +186,7 @@ fun RecordingScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Recording Voice...",
+                            text = strings.recordingVoice,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFDC2626)
@@ -227,7 +229,7 @@ fun RecordingScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (isMinimumReached) "Minimum 5s reached" else "Minimum 5s required",
+                            text = if (isMinimumReached) strings.min5sReached else strings.min5sRequired,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (isMinimumReached) Color(0xFF065F46) else Color(0xFFB91C1C)
@@ -269,7 +271,7 @@ fun RecordingScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Terdengar: \"$liveTranscript\"",
+                                text = strings.heardLive(liveTranscript),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = PrimaryDarkNavy,
@@ -286,7 +288,7 @@ fun RecordingScreen(
                             .padding(horizontal = 14.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "● Mikrofon siap, silakan mulai berbicara...",
+                            text = strings.micReadyListening,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = PrimaryBlue
@@ -300,7 +302,7 @@ fun RecordingScreen(
                             .padding(horizontal = 14.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "● Merekam suara (audio akan diproses via AI)...",
+                            text = strings.recordingAudioAi,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFFB45309)
@@ -309,7 +311,7 @@ fun RecordingScreen(
                 } else {
                     // Motivational Quote
                     Text(
-                        text = "\"Stay relaxed. Articulate your ideas naturally as if speaking to a supportive colleague.\"",
+                        text = strings.recordingQuote,
                         fontSize = 14.sp,
                         lineHeight = 22.sp,
                         color = TextSecondary,
@@ -360,7 +362,7 @@ fun RecordingScreen(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = "Tap the red circle when finished",
+                    text = strings.tapRedCircleToFinish,
                     fontSize = 13.sp,
                     color = TextMuted
                 )

@@ -8,12 +8,17 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
+import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 
 class SpeechToTextEngine(private val context: Context) {
@@ -147,11 +152,11 @@ class SpeechToTextEngine(private val context: Context) {
         )
     }
 
-    private fun transcribeViaGeminiAudio(apiKey: String, audioFile: File, language: String): CloudSttResult {
+    private suspend fun transcribeViaGeminiAudio(apiKey: String, audioFile: File, language: String): CloudSttResult {
         val audioBytes = try {
             audioFile.readBytes()
         } catch (e: Exception) {
-            Log.e(tag, "Failed to read audio file", e)
+            Log.e(tag, "Failed to read audio file: ${e.javaClass.simpleName}: ${e.message}", e)
             return CloudSttResult(isSuccess = false, errorCode = "FILE_READ_ERROR", errorMessage = "Gagal membaca file rekaman suara.")
         }
 
@@ -169,131 +174,190 @@ class SpeechToTextEngine(private val context: Context) {
         }
 
         val candidateModels = mutableListOf("gemini-3.8-flash", "gemini-3.5-flash-lite")
-        val candidateMimeTypes = listOf("audio/mp4", "audio/m4a")
+        val candidateMimeTypes = listOf("audio/m4a", "audio/mp4")
 
         var lastHttpCode: Int? = null
+        var lastNetworkException: IOException? = null
         var lastErrorMessage: String? = null
+        var sawTransientServerError = false
 
-        var modelIndex = 0
-        while (modelIndex < candidateModels.size) {
-            val model = candidateModels[modelIndex]
-            modelIndex++
+        val maxRounds = 2
+        for (round in 1..maxRounds) {
+            var stopAllRetries = false
+            var sawRoundTransientError = false
+            var modelIndex = 0
 
-            for (mimeType in candidateMimeTypes) {
-                try {
-                    val inlineData = JsonObject().apply {
-                        addProperty("mime_type", mimeType)
-                        addProperty("data", base64Audio)
-                    }
-                    val partAudio = JsonObject().apply {
-                        add("inline_data", inlineData)
-                    }
-                    val partText = JsonObject().apply {
-                        addProperty("text", prompt)
-                    }
-                    val partsArray = JsonArray().apply {
-                        add(partAudio)
-                        add(partText)
-                    }
-                    val contentObj = JsonObject().apply {
-                        add("parts", partsArray)
-                    }
-                    val contentsArray = JsonArray().apply {
-                        add(contentObj)
-                    }
-                    val rootObj = JsonObject().apply {
-                        add("contents", contentsArray)
-                        add("generationConfig", JsonObject().apply {
-                            addProperty("temperature", 0.1)
-                        })
-                    }
+            while (modelIndex < candidateModels.size) {
+                val model = candidateModels[modelIndex]
+                modelIndex++
 
-                    val jsonBody = gson.toJson(rootObj)
-                    val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
+                for (mimeType in candidateMimeTypes) {
+                    var tryNextMimeType = false
+                    try {
+                        val inlineData = JsonObject().apply {
+                            addProperty("mime_type", mimeType)
+                            addProperty("data", base64Audio)
+                        }
+                        val partAudio = JsonObject().apply {
+                            add("inline_data", inlineData)
+                        }
+                        val partText = JsonObject().apply {
+                            addProperty("text", prompt)
+                        }
+                        val partsArray = JsonArray().apply {
+                            add(partAudio)
+                            add(partText)
+                        }
+                        val contentObj = JsonObject().apply {
+                            add("parts", partsArray)
+                        }
+                        val contentsArray = JsonArray().apply {
+                            add(contentObj)
+                        }
+                        val rootObj = JsonObject().apply {
+                            add("contents", contentsArray)
+                            add("generationConfig", JsonObject().apply {
+                                addProperty("temperature", 0.1)
+                            })
+                        }
 
-                    val request = Request.Builder()
-                        .url(endpoint)
-                        .addHeader("x-goog-api-key", apiKey)
-                        .addHeader("Content-Type", "application/json")
-                        .post(jsonBody.toRequestBody("application/json".toMediaType()))
-                        .build()
+                        val jsonBody = gson.toJson(rootObj)
+                        val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
 
-                    var stopAllRetries = false
-                    httpClient.newCall(request).execute().use { response ->
-                        lastHttpCode = response.code
-                        val bodyStr = response.body?.string() ?: ""
+                        val request = Request.Builder()
+                            .url(endpoint)
+                            .addHeader("x-goog-api-key", apiKey)
+                            .addHeader("Content-Type", "application/json")
+                            .post(jsonBody.toRequestBody("application/json".toMediaType()))
+                            .build()
 
-                        if (!response.isSuccessful) {
-                            Log.w(tag, "Gemini STT ($model, $mimeType) returned HTTP ${response.code}: $bodyStr")
-                            val parsedErr = try {
-                                val errJson = JsonParser.parseString(bodyStr).asJsonObject
-                                errJson.getAsJsonObject("error")?.get("message")?.asString
-                            } catch (e: Exception) {
-                                null
-                            } ?: "HTTP ${response.code}"
-                            lastErrorMessage = parsedErr
+                        httpClient.newCall(request).execute().use { response ->
+                            lastHttpCode = response.code
+                            lastNetworkException = null
+                            val bodyStr = response.body?.string() ?: ""
 
-                            if (response.code == 401 || response.code == 403) {
-                                stopAllRetries = true
+                            if (!response.isSuccessful) {
+                                Log.w(tag, "Gemini STT ($model, $mimeType) returned HTTP ${response.code}: $bodyStr")
+                                val parsedErr = try {
+                                    val errJson = JsonParser.parseString(bodyStr).asJsonObject
+                                    errJson.getAsJsonObject("error")?.get("message")?.asString
+                                } catch (e: Exception) {
+                                    null
+                                } ?: "HTTP ${response.code}"
+                                lastErrorMessage = parsedErr
+
+                                if (response.code == 401 || response.code == 403) {
+                                    stopAllRetries = true
+                                    return@use
+                                }
+
+                                if (response.code == 429 || response.code == 500 || response.code == 502 || response.code == 503 || response.code == 504) {
+                                    sawTransientServerError = true
+                                    sawRoundTransientError = true
+                                }
+
+                                // Only discover the *recommended replacement* model, not the deprecated one mentioned in the error
+                                val recommendedRegex = Regex("""(?:use|update your code to use)\s+models/([a-zA-Z0-9.-]+)""", RegexOption.IGNORE_CASE)
+                                val matches = recommendedRegex.findAll(bodyStr).map { it.groupValues[1] }.toList()
+                                for (rec in matches) {
+                                    val cleanRec = rec.removePrefix("models/").trim()
+                                    val isDeprecated = cleanRec.contains("2.0") || cleanRec.contains("2.5") || cleanRec.contains("1.5")
+                                    if (!isDeprecated && !candidateModels.contains(cleanRec) && cleanRec != model) {
+                                        Log.i(tag, "Discovered newer recommended Gemini model: $cleanRec")
+                                        candidateModels.add(cleanRec)
+                                    }
+                                }
+
+                                // Only retry a different MIME type on client format errors (400/415); otherwise switch models
+                                tryNextMimeType = (response.code == 400 || response.code == 415)
                                 return@use
                             }
 
-                            // Only discover the *recommended replacement* model, not the deprecated one mentioned in the error
-                            val recommendedRegex = Regex("""(?:use|update your code to use)\s+models/([a-zA-Z0-9.-]+)""", RegexOption.IGNORE_CASE)
-                            val matches = recommendedRegex.findAll(bodyStr).map { it.groupValues[1] }.toList()
-                            for (rec in matches) {
-                                val cleanRec = rec.removePrefix("models/").trim()
-                                val isDeprecated = cleanRec.contains("2.0") || cleanRec.contains("2.5") || cleanRec.contains("1.5")
-                                if (!isDeprecated && !candidateModels.contains(cleanRec) && cleanRec != model) {
-                                    Log.i(tag, "Discovered newer recommended Gemini model: $cleanRec")
-                                    candidateModels.add(cleanRec)
-                                }
-                            }
-
-                            return@use // try next combination
-                        }
-
-                        val root = JsonParser.parseString(bodyStr).asJsonObject
-                        val candidates = root.getAsJsonArray("candidates")
-                        if (candidates != null && candidates.size() > 0) {
-                            val candidate = candidates[0].asJsonObject
-                            val content = candidate.getAsJsonObject("content")
-                            val parts = content?.getAsJsonArray("parts")
-                            if (parts != null && parts.size() > 0) {
-                                val text = parts[0].asJsonObject.get("text")?.takeIf { !it.isJsonNull }?.asString?.trim()
-                                if (!text.isNullOrBlank()) {
-                                    val silenceMarkers = listOf("[silence]", "[hening]", "no speech detected", "tidak ada ucapan")
-                                    if (silenceMarkers.any { text.equals(it, ignoreCase = true) }) {
-                                        return CloudSttResult(
-                                            isSuccess = false,
-                                            errorCode = "AUDIO_SILENT",
-                                            errorMessage = "Audio yang terekam hening (tidak ada suara ucapan yang terdeteksi)."
-                                        )
+                            val root = JsonParser.parseString(bodyStr).asJsonObject
+                            val candidates = root.getAsJsonArray("candidates")
+                            if (candidates != null && candidates.size() > 0) {
+                                val candidate = candidates[0].asJsonObject
+                                val content = candidate.getAsJsonObject("content")
+                                val parts = content?.getAsJsonArray("parts")
+                                if (parts != null && parts.size() > 0) {
+                                    val text = parts[0].asJsonObject.get("text")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                                    if (!text.isNullOrBlank()) {
+                                        val silenceMarkers = listOf("[silence]", "[hening]", "no speech detected", "tidak ada ucapan")
+                                        if (silenceMarkers.any { text.equals(it, ignoreCase = true) }) {
+                                            return CloudSttResult(
+                                                isSuccess = false,
+                                                errorCode = "AUDIO_SILENT",
+                                                errorMessage = "Audio yang terekam hening (tidak ada suara ucapan yang terdeteksi)."
+                                            )
+                                        }
+                                        return CloudSttResult(isSuccess = true, transcript = text)
                                     }
-                                    return CloudSttResult(isSuccess = true, transcript = text)
                                 }
                             }
+                            lastErrorMessage = "Respons Gemini tidak berisi teks transkrip."
                         }
+                    } catch (e: IOException) {
+                        Log.e(tag, "Gemini call network exception ($model, $mimeType): ${e.javaClass.simpleName}: ${e.message}", e)
+                        lastHttpCode = null
+                        lastNetworkException = e
+                        lastErrorMessage = e.localizedMessage ?: "Gagal menghubungi Gemini server"
+                        if (e is SocketTimeoutException) {
+                            sawTransientServerError = true
+                            sawRoundTransientError = true
+                        }
+                    } catch (e: Exception) {
+                        Log.e(tag, "Gemini call exception ($model, $mimeType): ${e.javaClass.simpleName}: ${e.message}", e)
+                        lastHttpCode = null
+                        lastNetworkException = null
+                        lastErrorMessage = e.localizedMessage ?: "Gagal menghubungi Gemini server"
                     }
-                    if (stopAllRetries) break
-                } catch (e: Exception) {
-                    Log.e(tag, "Gemini call exception ($model, $mimeType)", e)
-                    lastErrorMessage = e.localizedMessage ?: "Gagal menghubungi Gemini server"
+
+                    if (stopAllRetries || !tryNextMimeType) break
                 }
+
+                if (stopAllRetries) break
             }
-            if (lastHttpCode == 401 || lastHttpCode == 403) break
+
+            if (stopAllRetries || !sawRoundTransientError || round >= maxRounds) {
+                break
+            }
+            Log.i(tag, "Transient Gemini error encountered; retrying after backoff (round ${round + 1}/$maxRounds)...")
+            delay(1500L)
         }
 
-        val friendlyError = when (lastHttpCode) {
-            400 -> "Permintaan ditolak Google (HTTP 400): $lastErrorMessage"
-            401, 403 -> "Gemini API Key tidak valid atau belum diaktifkan (HTTP $lastHttpCode): $lastErrorMessage"
-            429 -> "Batas kuota Gemini API tercapai (HTTP 429). Silakan tunggu sebentar."
-            else -> lastErrorMessage ?: "Gagal mentranskripsi audio dengan Gemini AI."
+        val networkEx = lastNetworkException
+        val errorCode = when {
+            networkEx != null -> "GEMINI_NETWORK_ERROR"
+            lastHttpCode == 503 || lastHttpCode == 429 || sawTransientServerError -> "GEMINI_BUSY"
+            else -> "GEMINI_ERROR"
+        }
+
+        val friendlyError = when {
+            networkEx is UnknownHostException ->
+                "Tidak dapat terhubung ke server Gemini (DNS gagal / tidak ada koneksi internet). Periksa Wi-Fi, data seluler, atau jaringan emulator Anda."
+            networkEx is SocketTimeoutException ->
+                "Koneksi ke server Gemini kehabisan waktu (timeout). Silakan coba lagi."
+            networkEx is ConnectException ->
+                "Gagal terhubung ke server Gemini. Periksa koneksi internet perangkat Anda."
+            networkEx != null ->
+                "Gangguan jaringan saat menghubungi Gemini (${networkEx.javaClass.simpleName}): ${networkEx.localizedMessage ?: "periksa koneksi internet Anda."}"
+            lastHttpCode == 400 ->
+                "Permintaan ditolak Google (HTTP 400): $lastErrorMessage"
+            lastHttpCode == 401 || lastHttpCode == 403 ->
+                "Gemini API Key tidak valid atau belum diaktifkan (HTTP $lastHttpCode): $lastErrorMessage"
+            lastHttpCode == 404 ->
+                "Model Gemini tidak ditemukan (HTTP 404): $lastErrorMessage"
+            lastHttpCode == 429 ->
+                "Batas kuota Gemini API tercapai (HTTP 429). Silakan tunggu sebentar."
+            lastHttpCode == 503 ->
+                "Model Gemini sedang mengalami lonjakan trafik tinggi (HTTP 503). Ini bersifat sementara, silakan coba lagi sebentar lagi."
+            else ->
+                lastErrorMessage ?: "Gagal mentranskripsi audio dengan Gemini AI."
         }
 
         return CloudSttResult(
             isSuccess = false,
-            errorCode = "GEMINI_ERROR",
+            errorCode = errorCode,
             errorMessage = friendlyError
         )
     }

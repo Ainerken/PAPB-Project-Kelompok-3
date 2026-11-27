@@ -1,5 +1,6 @@
 package com.example.speakup.service
 
+import android.util.Log
 import com.example.speakup.data.model.AiFeedbackItem
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -14,6 +15,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
+
+    private val tag = "SpeakUpAI"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -127,6 +130,7 @@ class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
 
         val candidateModels = mutableListOf("gemini-3.8-flash", "gemini-3.5-flash-lite")
         var modelIndex = 0
+        var stopAllAttempts = false
         while (modelIndex < candidateModels.size) {
             val model = candidateModels[modelIndex]
             modelIndex++
@@ -141,8 +145,13 @@ class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
                     .build()
 
                 client.newCall(request).execute().use { response ->
-                    val responseBody = response.body?.string() ?: return@use
+                    val responseBody = response.body?.string() ?: ""
                     if (!response.isSuccessful) {
+                        Log.w(tag, "Gemini AI ($model) returned HTTP ${response.code}: $responseBody")
+                        if (response.code == 401 || response.code == 403) {
+                            stopAllAttempts = true
+                            return@use
+                        }
                         val recommendedRegex = Regex("""(?:use|update your code to use)\s+models/([a-zA-Z0-9.-]+)""", RegexOption.IGNORE_CASE)
                         val matches = recommendedRegex.findAll(responseBody).map { it.groupValues[1] }.toList()
                         for (rec in matches) {
@@ -154,6 +163,7 @@ class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
                         }
                         return@use
                     }
+                    if (responseBody.isBlank()) return@use
 
                     val rootJson = JsonParser.parseString(responseBody).asJsonObject
                     val candidates = rootJson.getAsJsonArray("candidates")
@@ -190,8 +200,9 @@ class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
                         grammarScore = score
                     )
                 }
+                if (stopAllAttempts) break
             } catch (e: Exception) {
-                // Try next model
+                Log.e(tag, "Gemini AI call exception ($model): ${e.javaClass.simpleName}: ${e.message}", e)
             }
         }
         return null

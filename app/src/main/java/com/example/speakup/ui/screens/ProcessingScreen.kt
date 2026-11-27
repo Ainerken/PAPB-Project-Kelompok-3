@@ -98,7 +98,7 @@ fun ProcessingScreen(
                 sttErrorCode = sttResult.errorCode
                 sttErrorMessage = sttResult.errorMessage
                 when (sttResult.errorCode) {
-                    "GEMINI_ERROR" -> showGeminiErrorDialog = true
+                    "GEMINI_ERROR", "GEMINI_NETWORK_ERROR", "GEMINI_BUSY" -> showGeminiErrorDialog = true
                     "AUDIO_SILENT", "AUDIO_EMPTY" -> showSilentAudioDialog = true
                     "NO_SPEECH_NO_API_KEY" -> showNoSpeechDialog = true
                     else -> showErrorDialog = true
@@ -300,6 +300,22 @@ fun ProcessingScreen(
     }
 
     if (showGeminiErrorDialog) {
+        val isTransientOrNetwork = sttErrorCode == "GEMINI_NETWORK_ERROR" || sttErrorCode == "GEMINI_BUSY"
+        val hintText = when (sttErrorCode) {
+            "GEMINI_NETWORK_ERROR" -> if (strings.isIndonesian)
+                "Periksa koneksi internet / Wi-Fi / jaringan emulator Anda, lalu tekan Coba Lagi. Anda juga bisa menggunakan simulasi untuk melanjutkan evaluasi."
+            else
+                "Check your device/emulator internet connection and DNS, then tap Retry. You can also use a sample simulation to continue."
+            "GEMINI_BUSY" -> if (strings.isIndonesian)
+                "Server Gemini sedang sibuk sementara. Tunggu beberapa detik lalu tekan Coba Lagi, atau gunakan simulasi untuk melanjutkan evaluasi."
+            else
+                "Gemini servers are temporarily busy. Wait a few seconds and tap Retry, or use a sample simulation to continue."
+            else -> if (strings.isIndonesian)
+                "Pastikan API Key Anda aktif di Google AI Studio (aistudio.google.com). Anda dapat mengubah API Key sekarang atau menggunakan simulasi untuk melanjutkan evaluasi."
+            else
+                "Ensure your API Key is active in Google AI Studio (aistudio.google.com). You can update your API Key now or use a sample simulation to continue."
+        }
+
         AlertDialog(
             onDismissRequest = { },
             title = {
@@ -335,10 +351,7 @@ fun ProcessingScreen(
                         )
                     }
                     Text(
-                        if (strings.isIndonesian)
-                            "Pastikan API Key Anda aktif di Google AI Studio (aistudio.google.com). Anda dapat mengubah API Key sekarang atau menggunakan simulasi untuk melanjutkan evaluasi."
-                        else
-                            "Ensure your API Key is active in Google AI Studio (aistudio.google.com). You can update your API Key now or use a sample simulation to continue.",
+                        text = hintText,
                         fontSize = 12.sp,
                         color = TextMuted
                     )
@@ -349,28 +362,54 @@ fun ProcessingScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Button(
-                        onClick = {
-                            showGeminiErrorDialog = false
-                            showApiKeyInputDialog = true
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
-                    ) {
-                        Text(
-                            if (strings.isIndonesian) "Perbaiki API Key" else "Update API Key",
-                            color = Color.White
-                        )
-                    }
+                    if (isTransientOrNetwork) {
+                        Button(
+                            onClick = {
+                                showGeminiErrorDialog = false
+                                processingTrigger++
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                        ) {
+                            Text(strings.retry, color = Color.White)
+                        }
 
-                    OutlinedButton(
-                        onClick = {
-                            showGeminiErrorDialog = false
-                            processingTrigger++
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(strings.retry, color = PrimaryNavyText)
+                        OutlinedButton(
+                            onClick = {
+                                showGeminiErrorDialog = false
+                                showApiKeyInputDialog = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                if (strings.isIndonesian) "Perbaiki API Key" else "Update API Key",
+                                color = PrimaryNavyText
+                            )
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                showGeminiErrorDialog = false
+                                showApiKeyInputDialog = true
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                        ) {
+                            Text(
+                                if (strings.isIndonesian) "Perbaiki API Key" else "Update API Key",
+                                color = Color.White
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                showGeminiErrorDialog = false
+                                processingTrigger++
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(strings.retry, color = PrimaryNavyText)
+                        }
                     }
 
                     TextButton(

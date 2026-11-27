@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.speakup.data.repository.UserRepository
 import com.example.speakup.ui.theme.*
+import kotlinx.coroutines.launch
 
 @Composable
 fun ForgotPasswordScreen(
@@ -35,11 +36,13 @@ fun ForgotPasswordScreen(
     val context = LocalContext.current
     val strings = LocalAppStrings.current
     val userRepo = remember { UserRepository(context) }
+    val coroutineScope = rememberCoroutineScope()
 
-    var email by remember { mutableStateOf("imran@student.ub.ac.id") }
+    var email by remember { mutableStateOf(userRepo.getUserEmail() ?: "") }
     var code by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("password999") }
-    var confirmPassword by remember { mutableStateOf("password999") }
+    var sentCode by remember { mutableStateOf<String?>(null) }
+    var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
 
     Scaffold(
         containerColor = BackgroundLight
@@ -178,8 +181,18 @@ fun ForgotPasswordScreen(
                                     .background(Color(0xFFEBF5FF))
                                     .padding(horizontal = 16.dp, vertical = 14.dp)
                                     .clickable {
-                                        code = "9281"
-                                        Toast.makeText(context, strings.codeSentToast("9281"), Toast.LENGTH_SHORT).show()
+                                        val cleanEmail = email.trim()
+                                        if (cleanEmail.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
+                                            val msg = if (strings.isIndonesian) "Masukkan alamat email yang valid" else "Please enter a valid email address"
+                                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            val generated = (1000..9999).random().toString()
+                                            sentCode = generated
+                                            coroutineScope.launch {
+                                                userRepo.requestPasswordRecovery(cleanEmail)
+                                            }
+                                            Toast.makeText(context, strings.codeSentToast(generated), Toast.LENGTH_SHORT).show()
+                                        }
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -244,12 +257,28 @@ fun ForgotPasswordScreen(
 
                         Button(
                             onClick = {
-                                if (password != confirmPassword) {
-                                    Toast.makeText(context, strings.passwordsDoNotMatch, Toast.LENGTH_SHORT).show()
-                                } else {
-                                    userRepo.setPassword(password)
-                                    Toast.makeText(context, strings.passwordChangedSuccess, Toast.LENGTH_SHORT).show()
-                                    onSuccess()
+                                val cleanEmail = email.trim()
+                                when {
+                                    cleanEmail.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches() -> {
+                                        val msg = if (strings.isIndonesian) "Masukkan alamat email yang valid" else "Please enter a valid email address"
+                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    }
+                                    sentCode == null || code.trim() != sentCode -> {
+                                        val msg = if (strings.isIndonesian) "Kode verifikasi tidak valid. Tekan Kirim terlebih dahulu." else "Invalid verification code. Tap Send first."
+                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    }
+                                    password.length < 6 -> {
+                                        val msg = if (strings.isIndonesian) "Kata sandi minimal 6 karakter" else "Password must be at least 6 characters"
+                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    }
+                                    password != confirmPassword -> {
+                                        Toast.makeText(context, strings.passwordsDoNotMatch, Toast.LENGTH_SHORT).show()
+                                    }
+                                    else -> {
+                                        userRepo.setPassword(password)
+                                        Toast.makeText(context, strings.passwordChangedSuccess, Toast.LENGTH_SHORT).show()
+                                        onSuccess()
+                                    }
                                 }
                             },
                             modifier = Modifier

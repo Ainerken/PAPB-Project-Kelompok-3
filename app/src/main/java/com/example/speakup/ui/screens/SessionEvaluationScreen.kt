@@ -70,7 +70,7 @@ fun SessionEvaluationScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            playbackService.release()
+            playbackService.destroy()
         }
     }
 
@@ -92,8 +92,9 @@ fun SessionEvaluationScreen(
                     onClick = {
                         val trimmed = titleInput.trim()
                         if (trimmed.isNotBlank()) {
+                            val targetId = session?.id ?: sessionId
                             coroutineScope.launch {
-                                sessionRepo.updateSessionTitle(sessionId, trimmed)
+                                sessionRepo.updateSessionTitle(targetId, trimmed)
                                 session = session?.copy(title = trimmed)
                             }
                         }
@@ -311,7 +312,7 @@ fun SessionEvaluationScreen(
                                     currentSession.fillerPercentage > 15f -> "Tingkat kata pengisi sangat tinggi (${currentSession.fillerPercentage}%). Ganti kata pengisi dengan jeda hening sejenak."
                                     currentSession.fillerPercentage > 7f -> "Terdeteksi ${currentSession.fillerCount} kata pengisi (${currentSession.fillerPercentage}%). Kurangi pengulangan kata untuk kesan profesional."
                                     currentSession.wpm < 110 -> "Tempo bicara Anda lambat (${currentSession.wpm} WPM). Tingkatkan ritme bicara dan keyakinan artikulasi."
-                                    currentSession.wpm > 165 -> "Tempo bicara Anda terlalu cepat (${currentSession.wpm} WPM). Berikan jeda nafas antar kalimat."
+                                    currentSession.wpm > 150 -> "Tempo bicara Anda terlalu cepat (${currentSession.wpm} WPM). Berikan jeda nafas antar kalimat."
                                     else -> "Tempo bicara dan artikulasi Anda seimbang pada ${currentSession.wpm} WPM."
                                 }
                             } else {
@@ -319,7 +320,7 @@ fun SessionEvaluationScreen(
                                     currentSession.fillerPercentage > 15f -> "Filler word rate is very high (${currentSession.fillerPercentage}%). Replace filler words with brief silent pauses."
                                     currentSession.fillerPercentage > 7f -> "Detected ${currentSession.fillerCount} filler words (${currentSession.fillerPercentage}%). Reduce repetitions for a professional tone."
                                     currentSession.wpm < 110 -> "Speaking pace is slow (${currentSession.wpm} WPM). Increase your pace and articulation confidence."
-                                    currentSession.wpm > 165 -> "Speaking pace is too fast (${currentSession.wpm} WPM). Take breathing pauses between sentences."
+                                    currentSession.wpm > 150 -> "Speaking pace is too fast (${currentSession.wpm} WPM). Take breathing pauses between sentences."
                                     else -> "Speaking pace and articulation are balanced at ${currentSession.wpm} WPM."
                                 }
                             }

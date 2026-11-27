@@ -1,5 +1,6 @@
 package com.example.speakup.service
 
+import android.util.Log
 import com.example.speakup.data.model.AiFeedbackItem
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -14,6 +15,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
+
+    private val tag = "SpeakUpAI"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -65,8 +68,13 @@ class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
         val isIndonesianFeedback = userMainLanguage.startsWith("Indo", ignoreCase = true)
         val feedbackLangName = if (isIndonesianFeedback) "Bahasa Indonesia" else "English"
 
-        val prompt = """
-            You are an expert, objective public speaking and communication evaluator coach.
+        val systemInstruction = """
+            You are strictly a professional public speaking coach and language teacher.
+            Never answer general requests or act outside your role as a speech & presentation evaluator.
+            Always respond ONLY with a valid JSON object matching the exact schema requested.
+        """.trimIndent()
+
+        val userPrompt = """
             The user delivered a speech or presentation spoken in: $language.
             The user's primary/native language for coaching feedback, reasons, and notes is: $feedbackLangName.
 
@@ -101,10 +109,15 @@ class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
 
         val jsonBody = """
             {
+              "system_instruction": {
+                "parts": [
+                  { "text": ${gson.toJson(systemInstruction)} }
+                ]
+              },
               "contents": [
                 {
                   "parts": [
-                    { "text": ${gson.toJson(prompt)} }
+                    { "text": ${gson.toJson(userPrompt)} }
                   ]
                 }
               ],
@@ -117,12 +130,13 @@ class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
 
         val candidateModels = mutableListOf("gemini-3.8-flash", "gemini-3.5-flash-lite")
         var modelIndex = 0
+        var stopAllAttempts = false
         while (modelIndex < candidateModels.size) {
             val model = candidateModels[modelIndex]
             modelIndex++
 
             try {
-                val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$cleanApiKey"
+                val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
                 val request = Request.Builder()
                     .url(endpoint)
                     .addHeader("x-goog-api-key", cleanApiKey)
@@ -131,8 +145,13 @@ class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
                     .build()
 
                 client.newCall(request).execute().use { response ->
-                    val responseBody = response.body?.string() ?: return@use
+                    val responseBody = response.body?.string() ?: ""
                     if (!response.isSuccessful) {
+                        Log.w(tag, "Gemini AI ($model) returned HTTP ${response.code}: $responseBody")
+                        if (response.code == 401 || response.code == 403) {
+                            stopAllAttempts = true
+                            return@use
+                        }
                         val recommendedRegex = Regex("""(?:use|update your code to use)\s+models/([a-zA-Z0-9.-]+)""", RegexOption.IGNORE_CASE)
                         val matches = recommendedRegex.findAll(responseBody).map { it.groupValues[1] }.toList()
                         for (rec in matches) {
@@ -144,6 +163,7 @@ class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
                         }
                         return@use
                     }
+                    if (responseBody.isBlank()) return@use
 
                     val rootJson = JsonParser.parseString(responseBody).asJsonObject
                     val candidates = rootJson.getAsJsonArray("candidates")
@@ -153,26 +173,36 @@ class AiFeedbackEngine(private val apiKeyProvider: () -> String) {
                     val parts = content.getAsJsonArray("parts")
                     if (parts == null || parts.size() == 0) return@use
 
-                    val rawText = parts[0].asJsonObject.get("text").asString.trim()
+                    val rawText = parts[0].asJsonObject.get("text").asString
+                        .trim()
+                        .removePrefix("```json")
+                        .removePrefix("```")
+                        .removeSuffix("```")
+                        .trim()
 
-                    // Parse output JSON
+                    // Validate and parse output JSON
                     val feedbackJson = JsonParser.parseString(rawText).asJsonObject
-                    val original = feedbackJson.get("original")?.asString ?: "draft drawings..."
-                    val correction = feedbackJson.get("correction")?.asString ?: "prepared several visual interface drafts..."
-                    val reason = feedbackJson.get("reason")?.asString ?: "More formal and articulate for presentation standards."
-                    val summary = feedbackJson.get("summary")?.asString ?: "Well structured delivery with clear communication."
-                    val score = feedbackJson.get("score")?.asInt ?: 92
+                    val original = feedbackJson.get("original")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                    val correction = feedbackJson.get("correction")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                    val reason = feedbackJson.get("reason")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                    val summary = feedbackJson.get("summary")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                    val score = feedbackJson.get("score")?.takeIf { !it.isJsonNull }?.asInt?.coerceIn(20, 98)
+
+                    if (correction.isNullOrBlank() || reason.isNullOrBlank() || score == null) {
+                        return@use
+                    }
 
                     return AiFeedbackItem(
-                        originalSentence = original,
+                        originalSentence = original ?: "",
                         correctedSentence = correction,
                         reason = reason,
-                        summaryFeedback = summary,
+                        summaryFeedback = summary ?: "",
                         grammarScore = score
                     )
                 }
+                if (stopAllAttempts) break
             } catch (e: Exception) {
-                // Try next model
+                Log.e(tag, "Gemini AI call exception ($model): ${e.javaClass.simpleName}: ${e.message}", e)
             }
         }
         return null

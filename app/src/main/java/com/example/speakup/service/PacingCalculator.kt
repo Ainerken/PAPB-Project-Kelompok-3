@@ -28,7 +28,7 @@ object PacingCalculator {
             calculatedWpm < 80 -> {
                 category = if (isIndonesian) "Sangat Lambat" else "Very Slow"
                 advice = if (isIndonesian)
-                    "Tempo bicara sangat lambat (<80 WPM). Tingkatkan ritme bicara Anda secara signifikan agar materi tidak terasa monoton atau terputus-putus."
+                    "Tempo bicara sangat lambat (<80 WPM). Tingkatkan ritme bicara Anda agar materi tidak terasa monoton atau terputus-putus."
                 else
                     "Speaking pace is very slow (<80 WPM). Pick up your tempo to keep listeners engaged."
                 deliveryStatus = "Halting & Disjointed"
@@ -38,43 +38,43 @@ object PacingCalculator {
             calculatedWpm in 80..99 -> {
                 category = if (isIndonesian) "Terlalu Lambat" else "Too Slow"
                 advice = if (isIndonesian)
-                    "Tempo bicara Anda cenderung lambat. Tingkatkan ritme bicara Anda dengan artikulasi yang lebih mantap agar audiens tetap fokus."
+                    "Tempo bicara Anda cenderung lambat (<110 WPM). Tingkatkan ritme bicara Anda dengan artikulasi yang lebih mantap agar audiens tetap fokus."
                 else
-                    "Your speaking pace is somewhat slow. Increase your cadence with firmer articulation."
+                    "Your speaking pace is somewhat slow (<110 WPM). Increase your cadence with firmer articulation."
                 deliveryStatus = "Too Slow"
                 deliveryStatusId = "Terlalu Lambat"
                 score = (50 + ((calculatedWpm - 80) / 20f * 17)).roundToInt().coerceIn(50, 67)
             }
-            calculatedWpm in 100..114 -> {
+            calculatedWpm in 100..109 -> {
                 category = if (isIndonesian) "Agak Lambat" else "Slightly Slow"
                 advice = if (isIndonesian)
-                    "Kecepatan bicara sedikit di bawah tempo optimal. Anda bisa sedikit mempercepat tempo dan mengurangi jeda ragu."
+                    "Kecepatan bicara sedikit di bawah tempo optimal (<110 WPM). Anda bisa sedikit mempercepat tempo dan mengurangi jeda ragu."
                 else
-                    "Speaking pace is slightly below optimal. Gradually quicken your transitions between thoughts."
+                    "Speaking pace is slightly below optimal (<110 WPM). Gradually quicken your transitions between thoughts."
                 deliveryStatus = "Slow & Hesitant"
                 deliveryStatusId = "Lambat & Ragu"
-                score = (68 + ((calculatedWpm - 100) / 15f * 11)).roundToInt().coerceIn(68, 79)
+                score = (68 + ((calculatedWpm - 100) / 10f * 11)).roundToInt().coerceIn(68, 79)
             }
-            calculatedWpm in 115..155 -> {
+            calculatedWpm in 110..150 -> {
                 category = "Optimal (Ideal)"
                 advice = if (isIndonesian)
-                    "Kecepatan berbicara Anda sangat ideal dan nyaman didengarkan (115-155 WPM). Pendengar dapat mencerna materi dengan baik."
+                    "Kecepatan berbicara Anda sangat ideal dan nyaman didengarkan (110-150 WPM). Pendengar dapat mencerna materi dengan baik."
                 else
-                    "Your pace is in the sweet spot (115-155 WPM). Excellent clarity and listener retention."
+                    "Your pace is in the sweet spot (110-150 WPM). Excellent clarity and listener retention."
                 deliveryStatus = "Steady & Composed"
                 deliveryStatusId = "Stabil & Tenang"
-                val distFromCenter = kotlin.math.abs(calculatedWpm - 135)
-                score = (100 - (distFromCenter * 0.5f)).roundToInt().coerceIn(88, 100)
+                val distFromCenter = kotlin.math.abs(calculatedWpm - 130)
+                score = (100 - (distFromCenter * 0.6f)).roundToInt().coerceIn(88, 100)
             }
-            calculatedWpm in 156..170 -> {
+            calculatedWpm in 151..170 -> {
                 category = if (isIndonesian) "Agak Cepat" else "Slightly Fast"
                 advice = if (isIndonesian)
-                    "Tempo bicara sedikit cepat namun masih dapat dipahami. Berikan jeda nafas 1 detik di setiap akhir kalimat penting."
+                    "Tempo bicara sedikit cepat (>150 WPM). Berikan jeda nafas 1 detik di setiap akhir kalimat penting."
                 else
-                    "Tempo is slightly brisk. Insert 1-second strategic pauses after key points."
+                    "Tempo is slightly brisk (>150 WPM). Insert 1-second strategic pauses after key points."
                 deliveryStatus = "Fast & Energetic"
                 deliveryStatusId = "Cepat & Berenergi"
-                score = (85 - ((calculatedWpm - 156) / 15f * 10)).roundToInt().coerceIn(75, 85)
+                score = (85 - ((calculatedWpm - 151) / 20f * 10)).roundToInt().coerceIn(75, 85)
             }
             calculatedWpm in 171..195 -> {
                 category = if (isIndonesian) "Terlalu Cepat" else "Too Fast"

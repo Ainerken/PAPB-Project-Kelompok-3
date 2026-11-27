@@ -13,10 +13,11 @@ class AppDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
 
     companion object {
         private const val DATABASE_NAME = "speakup_db.db"
-        private const val DATABASE_VERSION = 3
+        private const val DATABASE_VERSION = 4
 
         const val TABLE_SESSIONS = "practice_sessions"
         const val COL_ID = "id"
+        const val COL_REMOTE_ID = "remote_id"
         const val COL_SESSION_USER_ID = "user_id"
         const val COL_SESSION_USER_EMAIL = "user_email"
         const val COL_TITLE = "title"
@@ -61,6 +62,7 @@ class AppDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
         val createSessionsTable = """
             CREATE TABLE $TABLE_SESSIONS (
                 $COL_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COL_REMOTE_ID TEXT,
                 $COL_SESSION_USER_ID TEXT,
                 $COL_SESSION_USER_EMAIL TEXT,
                 $COL_TITLE TEXT NOT NULL,
@@ -129,34 +131,23 @@ class AppDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        try {
-            db.execSQL("ALTER TABLE $TABLE_USER ADD COLUMN $COL_USER_PHOTO_URI TEXT")
-        } catch (e: Exception) {}
-        try {
-            db.execSQL("ALTER TABLE $TABLE_SESSIONS ADD COLUMN $COL_SESSION_USER_ID TEXT")
-        } catch (e: Exception) {}
-        try {
-            db.execSQL("ALTER TABLE $TABLE_SESSIONS ADD COLUMN $COL_SESSION_USER_EMAIL TEXT")
-        } catch (e: Exception) {}
-        try {
-            db.execSQL("UPDATE $TABLE_SESSIONS SET $COL_SESSION_USER_ID = 'demo_user', $COL_SESSION_USER_EMAIL = 'imran@student.ub.ac.id' WHERE $COL_SESSION_USER_EMAIL IS NULL OR $COL_SESSION_USER_EMAIL = ''")
-        } catch (e: Exception) {}
+        if (oldVersion < 4) {
+            safeAddColumn(db, TABLE_USER, COL_USER_PHOTO_URI, "TEXT")
+            safeAddColumn(db, TABLE_SESSIONS, COL_SESSION_USER_ID, "TEXT")
+            safeAddColumn(db, TABLE_SESSIONS, COL_SESSION_USER_EMAIL, "TEXT")
+            safeAddColumn(db, TABLE_SESSIONS, COL_REMOTE_ID, "TEXT")
+            try {
+                db.execSQL("UPDATE $TABLE_SESSIONS SET $COL_SESSION_USER_ID = 'demo_user', $COL_SESSION_USER_EMAIL = 'imran@student.ub.ac.id' WHERE $COL_SESSION_USER_EMAIL IS NULL OR $COL_SESSION_USER_EMAIL = ''")
+            } catch (_: Exception) {}
+        }
     }
 
-    override fun onOpen(db: SQLiteDatabase) {
-        super.onOpen(db)
+    private fun safeAddColumn(db: SQLiteDatabase, table: String, column: String, type: String) {
         try {
-            db.execSQL("ALTER TABLE $TABLE_USER ADD COLUMN $COL_USER_PHOTO_URI TEXT")
-        } catch (e: Exception) {}
-        try {
-            db.execSQL("ALTER TABLE $TABLE_SESSIONS ADD COLUMN $COL_SESSION_USER_ID TEXT")
-        } catch (e: Exception) {}
-        try {
-            db.execSQL("ALTER TABLE $TABLE_SESSIONS ADD COLUMN $COL_SESSION_USER_EMAIL TEXT")
-        } catch (e: Exception) {}
-        try {
-            db.execSQL("UPDATE $TABLE_SESSIONS SET $COL_SESSION_USER_ID = 'demo_user', $COL_SESSION_USER_EMAIL = 'imran@student.ub.ac.id' WHERE $COL_SESSION_USER_EMAIL IS NULL OR $COL_SESSION_USER_EMAIL = ''")
-        } catch (e: Exception) {}
+            db.execSQL("ALTER TABLE $table ADD COLUMN $column $type")
+        } catch (_: Exception) {
+            // Column already exists
+        }
     }
 
     private fun seedInitialSessions(db: SQLiteDatabase) {
@@ -253,8 +244,11 @@ class AppDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
     }
 
     fun mapCursorToSession(c: Cursor): PracticeSession {
+        val remoteIdCol = c.getColumnIndex(COL_REMOTE_ID)
+        val remoteId = if (remoteIdCol != -1 && !c.isNull(remoteIdCol)) c.getString(remoteIdCol) else null
         return PracticeSession(
             id = c.getLong(c.getColumnIndexOrThrow(COL_ID)),
+            remoteId = remoteId,
             title = c.getString(c.getColumnIndexOrThrow(COL_TITLE)),
             timestamp = c.getLong(c.getColumnIndexOrThrow(COL_TIMESTAMP)),
             formattedDate = c.getString(c.getColumnIndexOrThrow(COL_FORMATTED_DATE)),

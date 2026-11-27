@@ -109,9 +109,10 @@ fun SpeakUpApp(
     }
 
     // Registration survey state
-    var regUsername by remember { mutableStateOf("Imran") }
-    var regEmail by remember { mutableStateOf("imran@student.ub.ac.id") }
-    var regPassword by remember { mutableStateOf("password123") }
+    var regUsername by remember { mutableStateOf("") }
+    var regEmail by remember { mutableStateOf("") }
+    var regPassword by remember { mutableStateOf("") }
+    var forgotPasswordReturnTo by remember { mutableStateOf<Screen>(Screen.Login) }
     var regRole by remember { mutableStateOf("Student") }
     var regConfidence by remember { mutableStateOf("Moderately") }
     var regChallenge by remember { mutableStateOf("Speaking Flawlessly") }
@@ -136,7 +137,7 @@ fun SpeakUpApp(
             is Screen.History -> Screen.Dashboard
             is Screen.Profile -> Screen.Dashboard
             is Screen.ChangePassword -> Screen.Profile
-            is Screen.ForgotPassword -> Screen.Profile
+            is Screen.ForgotPassword -> forgotPasswordReturnTo
             else -> Screen.Dashboard
         }
     }
@@ -181,6 +182,7 @@ fun SpeakUpApp(
                     currentScreen = Screen.Register
                 },
                 onNavigateToForgotPassword = {
+                    forgotPasswordReturnTo = Screen.Login
                     currentScreen = Screen.ForgotPassword
                 },
                 onDemoLogin = {
@@ -398,14 +400,19 @@ fun SpeakUpApp(
         is Screen.ChangePassword -> {
             ChangePasswordScreen(
                 onBack = { currentScreen = Screen.Profile },
-                onNavigateToForgotPassword = { currentScreen = Screen.ForgotPassword }
+                onNavigateToForgotPassword = {
+                    forgotPasswordReturnTo = Screen.ChangePassword
+                    currentScreen = Screen.ForgotPassword
+                }
             )
         }
 
         is Screen.ForgotPassword -> {
             ForgotPasswordScreen(
-                onBack = { currentScreen = Screen.Profile },
-                onSuccess = { currentScreen = Screen.Profile }
+                onBack = { currentScreen = forgotPasswordReturnTo },
+                onSuccess = {
+                    currentScreen = if (userRepository.isUserLoggedIn()) Screen.Profile else Screen.Login
+                }
             )
         }
     }

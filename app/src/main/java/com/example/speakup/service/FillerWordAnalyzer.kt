@@ -72,8 +72,7 @@ object FillerWordAnalyzer {
             ENGLISH_FILLERS
         }
 
-        val matches = mutableListOf<FillerWordMatch>()
-        val statMap = mutableMapOf<String, Int>()
+        val rawMatches = mutableListOf<Pair<FillerWordMatch, String>>()
 
         // Search for occurrences preserving word boundaries in original text
         for (filler in dictionary) {
@@ -85,14 +84,24 @@ object FillerWordAnalyzer {
                 val start = matcher.start()
                 val end = matcher.end()
                 val matchedText = transcript.substring(start, end)
-                matches.add(FillerWordMatch(matchedText, start, end))
-                val key = filler.lowercase(Locale.ROOT)
-                statMap[key] = (statMap[key] ?: 0) + 1
+                rawMatches.add(FillerWordMatch(matchedText, start, end) to filler.lowercase(Locale.ROOT))
             }
         }
 
-        // Sort matches by start index
-        matches.sortBy { it.startIndex }
+        // Sort by start index ascending, preferring longer phrase matches on ties, and remove overlaps
+        rawMatches.sortWith(compareBy<Pair<FillerWordMatch, String>> { it.first.startIndex }
+            .thenByDescending { it.first.endIndex - it.first.startIndex })
+
+        val matches = mutableListOf<FillerWordMatch>()
+        val statMap = mutableMapOf<String, Int>()
+        var lastEndIndex = 0
+        for ((match, key) in rawMatches) {
+            if (match.startIndex >= lastEndIndex) {
+                matches.add(match)
+                statMap[key] = (statMap[key] ?: 0) + 1
+                lastEndIndex = match.endIndex
+            }
+        }
 
         val words = transcript.trim().split("\\s+".toRegex()).filter { it.isNotBlank() }
         val totalWords = words.size.coerceAtLeast(1)

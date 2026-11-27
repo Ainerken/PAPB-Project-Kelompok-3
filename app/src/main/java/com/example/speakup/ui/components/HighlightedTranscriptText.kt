@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.sp
 import com.example.speakup.service.FillerWordAnalyzer
 import com.example.speakup.ui.theme.FillerHighlightBg
 import com.example.speakup.ui.theme.FillerHighlightText
+import com.example.speakup.ui.theme.LocalAppStrings
 import com.example.speakup.ui.theme.PrimaryBlue
 import com.example.speakup.ui.theme.TextPrimary
 
@@ -25,6 +26,7 @@ fun HighlightedTranscriptText(
     language: String,
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalAppStrings.current
     var isExpanded by remember { mutableStateOf(false) }
 
     val annotatedText = remember(transcript, language) {
@@ -80,7 +82,7 @@ fun HighlightedTranscriptText(
                 .padding(vertical = 4.dp, horizontal = 4.dp)
         ) {
             Text(
-                text = if (isExpanded) "Read Less" else "Read More",
+                text = if (isExpanded) strings.readLess else strings.readMore,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = PrimaryBlue
